@@ -3291,6 +3291,7 @@
     "panelAgentKeyCleared": "面板 Agent API Key 已清除",
     "panelAgentTemperature": "Temperature",
     "panelAgentMaxTokens": "最大 tokens",
+    "panelAgentToolRoundLimit": "工具轮次上限",
     "panelAgentMultiServer": "多服务器操作",
     "panelAgentMultiServerDesc": "允许面板 Agent 同时分析多个 SSH 终端，并按目标生成命令建议。",
     "panelAgentMaxTargets": "最多选择的 SSH 终端数",

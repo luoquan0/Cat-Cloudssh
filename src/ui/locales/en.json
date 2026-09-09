@@ -3291,6 +3291,7 @@
     "panelAgentKeyCleared": "Panel Agent API key cleared",
     "panelAgentTemperature": "Temperature",
     "panelAgentMaxTokens": "Max tokens",
+    "panelAgentToolRoundLimit": "Tool round limit",
     "panelAgentMultiServer": "Multi-server operations",
     "panelAgentMultiServerDesc": "Allow the panel Agent to analyze and propose commands for more than one SSH terminal at once.",
     "panelAgentMaxTargets": "Max selected SSH terminals",

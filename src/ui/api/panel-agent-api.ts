@@ -38,6 +38,7 @@ export type PanelAgentSettings = {
   model: string;
   temperature: number;
   maxTokens: number;
+  toolRoundLimit: number;
   multiServerEnabled: boolean;
   maxTargets: number;
   skills: PanelAgentSkill[];
@@ -172,6 +173,7 @@ function readSettingsPayload(payload: unknown): PanelAgentSettings {
     typeof settings.model !== "string" ||
     typeof settings.temperature !== "number" ||
     typeof settings.maxTokens !== "number" ||
+    typeof settings.toolRoundLimit !== "number" ||
     typeof settings.multiServerEnabled !== "boolean" ||
     typeof settings.maxTargets !== "number" ||
     !Array.isArray(settings.skills) ||

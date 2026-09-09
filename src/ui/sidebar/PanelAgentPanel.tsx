@@ -58,7 +58,7 @@ import {
 import { MarkdownRenderer } from "@/features/file-manager/components/MarkdownRenderer";
 import type { Tab } from "@/types/ui-types";
 
-const TOOL_ROUND_LIMIT = 6;
+const DEFAULT_TOOL_ROUND_LIMIT = 20;
 const COMMAND_OBSERVE_DELAY_MS = 1_200;
 
 const PANEL_AGENT_SELECTED_MODEL_STORAGE_KEY = "panelAgentSelectedModel";
@@ -766,7 +766,11 @@ export function PanelAgentPanel({
     signal: AbortSignal,
   ) {
     let history = seedMessages;
-    for (let round = 0; round < TOOL_ROUND_LIMIT; round += 1) {
+    const toolRoundLimit = Math.max(
+      1,
+      Math.round(settings?.toolRoundLimit ?? DEFAULT_TOOL_ROUND_LIMIT),
+    );
+    for (let round = 0; round < toolRoundLimit; round += 1) {
       signal.throwIfAborted();
       const response = await sendPanelAgentChat(
         {

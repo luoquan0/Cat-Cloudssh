@@ -36,6 +36,8 @@ const MAX_COMMANDS_PER_TARGET = 8;
 const MAX_COMMAND_LENGTH = 4_000;
 const MAX_CHAT_MESSAGES = 32;
 const MAX_TOOL_RESULT_LENGTH = 24_000;
+const MAX_PANEL_AGENT_MAX_TOKENS = 1_000_000;
+const MAX_PANEL_AGENT_TOOL_ROUNDS = 100;
 
 export type PanelAgentRisk = "low" | "medium" | "high";
 
@@ -60,6 +62,7 @@ export interface PanelAgentSettings {
   model: string;
   temperature: number;
   maxTokens: number;
+  toolRoundLimit: number;
   multiServerEnabled: boolean;
   maxTargets: number;
   skills: PanelAgentSkill[];
@@ -218,6 +221,7 @@ function defaultStoredSettings(): StoredPanelAgentSettings {
     model: process.env.PANEL_AGENT_MODEL ?? "",
     temperature: 0.2,
     maxTokens: 1_800,
+    toolRoundLimit: 20,
     multiServerEnabled: true,
     maxTargets: 4,
     skills: DEFAULT_SKILLS,
@@ -279,7 +283,20 @@ function sanitizeStoredSettings(raw: unknown): StoredPanelAgentSettings {
     model: text(value.model, fallback.model, 160),
     temperature: numberInRange(value.temperature, fallback.temperature, 0, 2),
     maxTokens: Math.round(
-      numberInRange(value.maxTokens, fallback.maxTokens, 256, 8_000),
+      numberInRange(
+        value.maxTokens,
+        fallback.maxTokens,
+        256,
+        MAX_PANEL_AGENT_MAX_TOKENS,
+      ),
+    ),
+    toolRoundLimit: Math.round(
+      numberInRange(
+        value.toolRoundLimit,
+        fallback.toolRoundLimit,
+        1,
+        MAX_PANEL_AGENT_TOOL_ROUNDS,
+      ),
     ),
     multiServerEnabled: bool(
       value.multiServerEnabled,

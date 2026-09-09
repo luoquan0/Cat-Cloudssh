@@ -9,8 +9,8 @@ services:
     ports:
       - "${CLOUDSSH_BIND_ADDRESS:-127.0.0.1}:${CLOUDSSH_HTTP_PORT:-8080}:8080"
     volumes:
-      - cloudssh-data:/app/data
-      - cloudssh-recordings:/app/data/session_recordings/guacamole
+      - ../runtime/cloudssh-data:/app/data
+      - ../runtime/cloudssh-recordings:/app/data/session_recordings/guacamole
     secrets:
       - cloudssh_master_key
     environment:
@@ -37,19 +37,13 @@ services:
     restart: unless-stopped
     stop_grace_period: 60s
     volumes:
-      - cloudssh-recordings:/termix-data/session_recordings/guacamole
+      - ../runtime/cloudssh-recordings:/termix-data/session_recordings/guacamole
     networks:
       - cloudssh-net
 
 secrets:
   cloudssh_master_key:
     file: ../secrets/cloudssh_master_key
-
-volumes:
-  cloudssh-data:
-    name: "${CLOUDSSH_DATA_VOLUME:-cloudssh-data}"
-  cloudssh-recordings:
-    name: "${CLOUDSSH_RECORDINGS_VOLUME:-cloudssh-recordings}"
 
 networks:
   cloudssh-net:

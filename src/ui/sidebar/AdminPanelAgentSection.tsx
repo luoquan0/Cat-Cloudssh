@@ -274,7 +274,7 @@ export function AdminPanelAgentSection({
                 <Input
                   type="number"
                   min="256"
-                  max="8000"
+                  max="1000000"
                   value={settings.maxTokens}
                   onChange={(event) =>
                     update({ maxTokens: Number(event.target.value) })
@@ -282,6 +282,19 @@ export function AdminPanelAgentSection({
                 />
               </label>
             </div>
+
+            <label className="grid gap-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+              {t("admin.panelAgentToolRoundLimit")}
+              <Input
+                type="number"
+                min="1"
+                max="100"
+                value={settings.toolRoundLimit}
+                onChange={(event) =>
+                  update({ toolRoundLimit: Number(event.target.value) })
+                }
+              />
+            </label>
 
             <div className="flex items-center justify-between gap-3 border border-border bg-background p-3">
               <div>

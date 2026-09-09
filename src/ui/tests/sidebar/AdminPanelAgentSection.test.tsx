@@ -35,6 +35,7 @@ const settings = {
   model: "",
   temperature: 0.2,
   maxTokens: 1800,
+  toolRoundLimit: 20,
   multiServerEnabled: true,
   maxTargets: 4,
   skills: [],
