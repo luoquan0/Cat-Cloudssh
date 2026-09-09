@@ -71,6 +71,8 @@ const MAX_CHAT_ATTACHMENTS = 6;
 const MAX_TEXT_ATTACHMENT_CHARS = 80_000;
 const MAX_IMAGE_ATTACHMENT_BYTES = 4 * 1024 * 1024;
 const MAX_STORED_CONVERSATIONS = 12;
+const MAX_API_CHAT_MESSAGES = 20;
+const MAX_TOOL_RESULT_CHARS = 12_000;
 
 const PANEL_AGENT_THINKING_MODES: PanelAgentReasoningEffort[] = [
   "auto",
@@ -172,12 +174,6 @@ type PanelAgentUiMessage = PanelAgentChatMessage & {
   id: string;
   error?: string;
 };
-type HighRiskCommandApproval = {
-  targetId: string;
-  hostName: string;
-  command: string;
-};
-
 function createMessageId() {
   return window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 }
@@ -185,7 +181,20 @@ function createMessageId() {
 function toApiMessages(
   messages: PanelAgentUiMessage[],
 ): PanelAgentChatMessage[] {
-  return messages.map(({ id: _id, error: _error, ...message }) => message);
+  return messages
+    .slice(-MAX_API_CHAT_MESSAGES)
+    .map(({ id: _id, error: _error, ...message }) => {
+      if (
+        message.role === "tool" &&
+        message.content.length > MAX_TOOL_RESULT_CHARS
+      ) {
+        return {
+          ...message,
+          content: message.content.slice(-MAX_TOOL_RESULT_CHARS),
+        };
+      }
+      return message;
+    });
 }
 
 function toUiMessages(
@@ -362,47 +371,6 @@ function commandWithEnter(command: string): string {
     ? command
     : `${command}\r`;
 }
-function highRiskCommandKey(targetId: string, command: string): string {
-  return JSON.stringify([targetId, command]);
-}
-
-function explicitlyApprovesHighRiskCommand(content: string): boolean {
-  const normalized = content.trim();
-  if (!normalized || /[?？]/u.test(normalized)) return false;
-  if (
-    /(?:不|不要|不能|取消|拒绝|撤销|别)|\b(?:do not|don't|cancel|deny|reject|revoke)\b/iu.test(
-      normalized,
-    )
-  ) {
-    return false;
-  }
-  return (
-    /(?:我)?(?:确认|授权|同意|允许)(?:(?:在|于)[\s\S]{0,120})?(?:继续|立即)?(?:执行|运行|删除|操作|上述|前述|刚才|该)/u.test(
-      normalized,
-    ) ||
-    /\b(?:i\s+)?(?:confirm|authorize|approve)\s+(?:the\s+)?(?:execution|command|operation|deletion|delete|run)\b/iu.test(
-      normalized,
-    )
-  );
-}
-
-function approvedHighRiskCommandKeys(
-  content: string,
-  pending: Map<string, HighRiskCommandApproval>,
-): string[] {
-  if (!explicitlyApprovesHighRiskCommand(content)) return [];
-  const entries = [...pending.entries()];
-  if (entries.length === 1) return [entries[0][0]];
-  const normalized = content.trim();
-  const matches = entries.filter(
-    ([, approval]) =>
-      normalized.includes(approval.command) &&
-      (normalized.includes(approval.targetId) ||
-        normalized.includes(approval.hostName)),
-  );
-  return matches.length === 1 ? [matches[0][0]] : [];
-}
-
 function isHighRiskCommand(command: string): boolean {
   const normalized = command.toLowerCase();
   return [
@@ -500,10 +468,6 @@ export function PanelAgentPanel({
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const latestMessageRef = useRef<HTMLDivElement | null>(null);
   const lastConversationActionRef = useRef<number | null>(null);
-  const pendingHighRiskCommandsRef = useRef<
-    Map<string, HighRiskCommandApproval>
-  >(new Map());
-  const approvedHighRiskCommandsRef = useRef<Set<string>>(new Set());
   const conversationActionHandlersRef = useRef<
     Record<PanelAgentConversationAction["type"], () => void>
   >({
@@ -710,28 +674,7 @@ export function PanelAgentPanel({
         error: "COMMAND_REQUIRED",
       });
     }
-    const approvalKey = highRiskCommandKey(targetId, command);
     const highRisk = declaredRisk === "high" || isHighRiskCommand(command);
-    if (highRisk && !approvedHighRiskCommandsRef.current.delete(approvalKey)) {
-      pendingHighRiskCommandsRef.current.set(approvalKey, {
-        targetId,
-        command,
-        hostName,
-      });
-      return toolResult(toolCall, {
-        ok: false,
-        action: toolCall.name,
-        targetId,
-        hostName,
-        command,
-        risk: "high",
-        purpose,
-        blocked: true,
-        error: "HIGH_RISK_REQUIRES_CONFIRMATION",
-        recentOutput: handle.getRecentOutput?.(80) ?? "",
-      });
-    }
-    pendingHighRiskCommandsRef.current.delete(approvalKey);
     if (handle.isConnected?.() === false) {
       return toolResult(toolCall, {
         ok: false,
@@ -858,7 +801,6 @@ export function PanelAgentPanel({
         abortControllerRef.current = null;
         setWorking(false);
       }
-      approvedHighRiskCommandsRef.current.clear();
     }
   }
 
@@ -896,14 +838,6 @@ export function PanelAgentPanel({
     if (!content && attachments.length === 0) {
       toast.error(t("panelAgent.instructionRequired"));
       return;
-    }
-    const approvedKeys = approvedHighRiskCommandKeys(
-      content,
-      pendingHighRiskCommandsRef.current,
-    );
-    approvedHighRiskCommandsRef.current = new Set(approvedKeys);
-    for (const key of approvedKeys) {
-      pendingHighRiskCommandsRef.current.delete(key);
     }
     const userMessage: PanelAgentUiMessage = {
       id: createMessageId(),
@@ -963,8 +897,6 @@ export function PanelAgentPanel({
     setAttachments([]);
     setHistoryOpen(false);
     setSettingsOpen(false);
-    pendingHighRiskCommandsRef.current.clear();
-    approvedHighRiskCommandsRef.current.clear();
   }
 
   function newConversation() {
@@ -974,8 +906,6 @@ export function PanelAgentPanel({
     setAttachments([]);
     setHistoryOpen(false);
     setSettingsOpen(false);
-    pendingHighRiskCommandsRef.current.clear();
-    approvedHighRiskCommandsRef.current.clear();
   }
 
   function toggleHistory() {
@@ -996,8 +926,6 @@ export function PanelAgentPanel({
     setAttachments([]);
     setHistoryOpen(false);
     setSettingsOpen(false);
-    pendingHighRiskCommandsRef.current.clear();
-    approvedHighRiskCommandsRef.current.clear();
   }
 
   conversationActionHandlersRef.current = {
@@ -1043,11 +971,7 @@ export function PanelAgentPanel({
             {payload.command}
           </pre>
         )}
-        {payload?.error === "HIGH_RISK_REQUIRES_CONFIRMATION" ? (
-          <p className="mb-1 text-amber-600">
-            {t("panelAgent.highRiskApprovalRequired")}
-          </p>
-        ) : payload?.error ? (
+        {payload?.error ? (
           <p className="mb-1 text-amber-600">{payload.error}</p>
         ) : null}
         {payload?.recentOutput && (

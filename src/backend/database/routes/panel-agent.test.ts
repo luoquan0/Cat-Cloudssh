@@ -77,7 +77,7 @@ describe("Panel Agent routes", () => {
     expect(JSON.stringify(body)).not.toContain("secret-key");
   });
 
-  it("returns the tmux pane execution constraint as a default CloudSSH skill", async () => {
+  it("defaults to direct-mode skills without safe operation guardrails", async () => {
     const store = new MemorySettingsStore();
     runtime = await startRouter(store);
 
@@ -85,18 +85,19 @@ describe("Panel Agent routes", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.settings.skills).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: "tmux-pane-execution",
-          enabled: true,
-          content: expect.stringContaining("tmux send-keys"),
-        }),
-      ]),
-    );
+    expect(body.settings.skills).toEqual([
+      expect.objectContaining({
+        id: "tmux-pane-execution",
+        enabled: true,
+        content: expect.stringContaining("tmux send-keys"),
+      }),
+    ]);
+    expect(
+      body.settings.skills.map((skill: { id: string }) => skill.id),
+    ).not.toContain("safe-ops");
   });
 
-  it("adds newly introduced built-in skills to legacy built-in skill sets", async () => {
+  it("preserves legacy custom skills without re-adding removed safe defaults", async () => {
     const store = new MemorySettingsStore();
     store.values.set(
       "panel_agent_settings_v1",
@@ -113,8 +114,8 @@ describe("Panel Agent routes", () => {
           {
             id: "safe-ops",
             name: "安全运维边界",
-            content: "旧默认技能",
-            enabled: true,
+            content: "旧自定义技能",
+            enabled: false,
           },
         ],
       }),
@@ -127,7 +128,7 @@ describe("Panel Agent routes", () => {
     expect(response.status).toBe(200);
     expect(
       body.settings.skills.map((skill: { id: string }) => skill.id),
-    ).toContain("tmux-pane-execution");
+    ).toEqual(["safe-ops"]);
   });
 
   it("persists skills with empty content", async () => {
@@ -319,12 +320,10 @@ describe("Panel Agent routes", () => {
     expect(request.messages[2].content).toContain("nginx error");
     expect(request.messages[2].content).not.toContain("leaked");
     expect(request.messages[0].content).toContain("tmux send-keys");
-    expect(request.messages[0].content).toContain(
+    expect(request.messages[0].content).not.toContain(
       "HIGH_RISK_REQUIRES_CONFIRMATION",
     );
-    expect(request.messages[0].content).toContain(
-      "repeat the exact same target, command",
-    );
+    expect(request.messages[0].content).not.toContain("hard-blocked");
   });
 
   it("allows contextual chat without selected SSH targets", async () => {
@@ -563,7 +562,26 @@ describe("Panel Agent routes", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        messages: [{ role: "user", content: "检查状态" }],
+        messages: [
+          { role: "user", content: "检查状态" },
+          {
+            role: "assistant",
+            content: "我会检查。",
+            toolCalls: [
+              {
+                id: "call-orphan",
+                name: "read_terminal_context",
+                arguments: { targetId: "tab-1" },
+              },
+            ],
+          },
+          {
+            role: "tool",
+            toolCallId: "call-orphan",
+            name: "read_terminal_context",
+            content: JSON.stringify({ ok: true, recentOutput: "old output" }),
+          },
+        ],
         targets: [],
       }),
     });
@@ -579,6 +597,14 @@ describe("Panel Agent routes", () => {
     expect(secondRequest.messages[0].content).toContain(
       "Tool calling is unavailable",
     );
+    expect(secondRequest.messages).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ role: "tool" })]),
+    );
+    expect(
+      secondRequest.messages.some(
+        (message: { tool_calls?: unknown }) => message.tool_calls,
+      ),
+    ).toBe(false);
   });
 
   it("returns readable upstream details when model listing fails", async () => {

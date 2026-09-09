@@ -113,9 +113,9 @@ describe("PanelAgentPanel", () => {
       apiKeyConfigured: true,
       skills: [
         {
-          id: "safe-ops",
-          name: "安全运维边界",
-          content: "高风险动作必须标红",
+          id: "tmux-pane-execution",
+          name: "tmux 会话执行约束",
+          content: "必须用 tmux send-keys 投递到目标 pane",
           enabled: true,
         },
       ],
@@ -149,7 +149,7 @@ describe("PanelAgentPanel", () => {
     expect(panelAgentApi.sendPanelAgentChat).toHaveBeenCalledWith(
       expect.objectContaining({
         messages: [{ role: "user", content: "hi" }],
-        skillIds: ["safe-ops"],
+        skillIds: ["tmux-pane-execution"],
         model: "ops-model",
         reasoningEffort: "auto",
         targets: [],
@@ -302,7 +302,7 @@ describe("PanelAgentPanel", () => {
       screen.getByRole("button", { name: "panelAgent.newChat" }),
     ).toBeTruthy();
     expect(screen.queryByText("panelAgent.noTerminals")).toBeNull();
-    expect(screen.queryByText("安全运维边界")).toBeNull();
+    expect(screen.queryByText("tmux 会话执行约束")).toBeNull();
 
     fireEvent.change(
       screen.getByPlaceholderText("panelAgent.chatPlaceholder"),
@@ -511,7 +511,7 @@ describe("PanelAgentPanel", () => {
     fireEvent.click(
       screen.getByRole("checkbox", { name: "panelAgent.contextData: db-1" }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "安全运维边界" }));
+    fireEvent.click(screen.getByRole("button", { name: "tmux 会话执行约束" }));
     fireEvent.change(
       screen.getByPlaceholderText("panelAgent.chatPlaceholder"),
       { target: { value: "check selected context" } },
@@ -621,7 +621,7 @@ describe("PanelAgentPanel", () => {
     expect(panelAgentApi.sendPanelAgentChat).toHaveBeenCalledWith(
       expect.objectContaining({
         messages: [{ role: "user", content: "检查 nginx" }],
-        skillIds: ["safe-ops"],
+        skillIds: ["tmux-pane-execution"],
         model: "ops-model",
         reasoningEffort: "auto",
         targets: [
@@ -645,103 +645,26 @@ describe("PanelAgentPanel", () => {
     expect(panelAgentApi.sendPanelAgentChat).toHaveBeenCalledTimes(2);
   });
 
-  it("hard-blocks deletion until a one-time confirmation repeats the exact command", async () => {
-    const tab = terminalTab();
-    const deleteToolCall = {
-      id: "delete-call",
-      name: "run_terminal_command" as const,
-      arguments: {
-        targetId: "tab-1",
-        command: "rm -rf /tmp/old-release",
-        purpose: "remove old release",
-        risk: "low",
-      },
-    };
-    panelAgentApi.sendPanelAgentChat
-      .mockResolvedValueOnce({
-        message: {
-          role: "assistant",
-          content: "准备删除旧发布目录。",
-          toolCalls: [deleteToolCall],
-        },
-      })
-      .mockResolvedValueOnce({
-        message: {
-          role: "assistant",
-          content: "请确认高风险命令。",
-          toolCalls: [],
-        },
-      })
-      .mockResolvedValueOnce({
-        message: {
-          role: "assistant",
-          content: "收到确认，执行同一条命令。",
-          toolCalls: [{ ...deleteToolCall, id: "confirmed-delete-call" }],
-        },
-      })
-      .mockResolvedValueOnce({
-        message: {
-          role: "assistant",
-          content: "删除命令已执行。",
-          toolCalls: [],
-        },
-      });
-
-    render(<PanelAgentPanel terminalTabs={[tab]} activeTabId="tab-1" />);
-    await screen.findByPlaceholderText("panelAgent.chatPlaceholder");
-    fireEvent.change(
-      screen.getByPlaceholderText("panelAgent.chatPlaceholder"),
-      { target: { value: "删除旧发布目录" } },
-    );
-    fireEvent.click(screen.getByText("panelAgent.send"));
-
-    await screen.findByText("panelAgent.highRiskApprovalRequired");
-    expect(tab.terminalRef?.current?.sendInput).not.toHaveBeenCalled();
-    await screen.findByText("请确认高风险命令。");
-
-    fireEvent.change(
-      screen.getByPlaceholderText("panelAgent.chatPlaceholder"),
-      { target: { value: "我确认执行上述高风险命令" } },
-    );
-    fireEvent.click(screen.getByText("panelAgent.send"));
-
-    await waitFor(
-      () =>
-        expect(tab.terminalRef?.current?.sendInput).toHaveBeenCalledWith(
-          "rm -rf /tmp/old-release\r",
-        ),
-      { timeout: 3_000 },
-    );
-    await screen.findByText("删除命令已执行。", {}, { timeout: 3_000 });
-    expect(tab.terminalRef?.current?.sendInput).toHaveBeenCalledTimes(1);
-  });
-
-  it("hard-blocks built-in high-risk mutations even when model risk is low", async () => {
+  it("executes destructive and mutating commands directly without high-risk confirmation", async () => {
     const tab = terminalTab();
     const commands = [
+      "rm -rf /tmp/old-release",
       "systemctl restart nginx",
-      "chmod -R 777 /etc/nginx",
-      "iptables -F",
-      "printf changed > /etc/nginx/nginx.conf",
-      "cp /tmp/nginx.conf /etc/nginx/nginx.conf",
-      "apt-get remove nginx -y",
-      "dd if=/tmp/image of=/dev/sdb",
-      "apt-get dist-upgrade -y",
-      "psql app -c 'UPDATE users SET active = false'",
+      "chmod -R 777 /tmp/demo",
     ];
     panelAgentApi.sendPanelAgentChat
       .mockResolvedValueOnce({
         message: {
           role: "assistant",
-          content: "这些变更需要逐条确认。",
+          content: "直接执行这些变更。",
           toolCalls: commands.map((command, index) => ({
-            id: `high-risk-${index}`,
+            id: `direct-${index}`,
             name: "run_terminal_command" as const,
             arguments: {
               targetId: "tab-1",
               command,
-              purpose: "test high-risk guard",
-              risk: "low",
+              purpose: "direct mode execution",
+              risk: "high",
             },
           })),
         },
@@ -749,7 +672,7 @@ describe("PanelAgentPanel", () => {
       .mockResolvedValueOnce({
         message: {
           role: "assistant",
-          content: "已拦截所有高风险变更。",
+          content: "变更已执行。",
           toolCalls: [],
         },
       });
@@ -758,141 +681,25 @@ describe("PanelAgentPanel", () => {
     await screen.findByPlaceholderText("panelAgent.chatPlaceholder");
     fireEvent.change(
       screen.getByPlaceholderText("panelAgent.chatPlaceholder"),
-      { target: { value: "执行变更" } },
+      {
+        target: { value: "执行变更" },
+      },
     );
     fireEvent.click(screen.getByText("panelAgent.send"));
 
-    await screen.findByText("已拦截所有高风险变更。");
-    expect(await screen.findAllByText("panelAgent.toolBlocked")).toHaveLength(
+    await screen.findByText("变更已执行。", {}, { timeout: 5_000 });
+    expect(tab.terminalRef?.current?.sendInput).toHaveBeenCalledTimes(
       commands.length,
     );
-    expect(tab.terminalRef?.current?.sendInput).not.toHaveBeenCalled();
-  });
-
-  it("does not approve multiple pending commands with one generic confirmation", async () => {
-    const firstTab = terminalTab();
-    const secondTab = terminalTab({
-      id: "tab-2",
-      instanceId: "instance-2",
-      label: "db-1",
-      host: { ...firstTab.host!, id: "43", name: "db-1" },
-      terminalRef: {
-        current: {
-          isConnected: () => true,
-          sendInput: vi.fn(),
-          getRecentOutput: () => "db ready",
-          getSessionContext: () => ({
-            sessionId: "session-2",
-            hostId: "43",
-            connected: true,
-          }),
-        },
-      },
-    });
-    const calls = [
-      {
-        id: "delete-web",
-        name: "run_terminal_command" as const,
-        arguments: {
-          targetId: "tab-1",
-          command: "rm -rf /tmp/web-release",
-          purpose: "remove web release",
-          risk: "high",
-        },
-      },
-      {
-        id: "delete-db",
-        name: "run_terminal_command" as const,
-        arguments: {
-          targetId: "tab-2",
-          command: "rm -rf /tmp/db-release",
-          purpose: "remove db release",
-          risk: "high",
-        },
-      },
-    ];
-    panelAgentApi.sendPanelAgentChat
-      .mockResolvedValueOnce({
-        message: {
-          role: "assistant",
-          content: "准备清理两台服务器。",
-          toolCalls: calls,
-        },
-      })
-      .mockResolvedValueOnce({
-        message: {
-          role: "assistant",
-          content: "两条命令都已拦截。",
-          toolCalls: [],
-        },
-      })
-      .mockResolvedValueOnce({
-        message: {
-          role: "assistant",
-          content: "请明确目标。",
-          toolCalls: calls,
-        },
-      })
-      .mockResolvedValueOnce({
-        message: {
-          role: "assistant",
-          content: "仍需明确授权。",
-          toolCalls: [],
-        },
-      })
-      .mockResolvedValueOnce({
-        message: {
-          role: "assistant",
-          content: "执行指定命令。",
-          toolCalls: calls,
-        },
-      })
-      .mockResolvedValueOnce({
-        message: {
-          role: "assistant",
-          content: "只执行了第一条。",
-          toolCalls: [],
-        },
-      });
-
-    render(
-      <PanelAgentPanel
-        terminalTabs={[firstTab, secondTab]}
-        activeTabId="tab-1"
-      />,
-    );
-    await screen.findByPlaceholderText("panelAgent.chatPlaceholder");
-    fireEvent.change(
-      screen.getByPlaceholderText("panelAgent.chatPlaceholder"),
-      { target: { value: "清理两台服务器" } },
-    );
-    fireEvent.click(screen.getByText("panelAgent.send"));
-    await screen.findByText("两条命令都已拦截。");
-
-    fireEvent.change(
-      screen.getByPlaceholderText("panelAgent.chatPlaceholder"),
-      { target: { value: "我确认执行上述高风险命令" } },
-    );
-    fireEvent.click(screen.getByText("panelAgent.send"));
-
-    await screen.findByText("仍需明确授权。", {}, { timeout: 3_000 });
-    expect(firstTab.terminalRef?.current?.sendInput).not.toHaveBeenCalled();
-    expect(secondTab.terminalRef?.current?.sendInput).not.toHaveBeenCalled();
-
-    fireEvent.change(
-      screen.getByPlaceholderText("panelAgent.chatPlaceholder"),
-      {
-        target: {
-          value: "我确认在 web-1 执行 rm -rf /tmp/web-release",
-        },
-      },
-    );
-    fireEvent.click(screen.getByText("panelAgent.send"));
-    await screen.findByText("只执行了第一条。", {}, { timeout: 3_000 });
-    expect(firstTab.terminalRef?.current?.sendInput).toHaveBeenCalledWith(
-      "rm -rf /tmp/web-release\r",
-    );
-    expect(secondTab.terminalRef?.current?.sendInput).not.toHaveBeenCalled();
+    for (const command of commands) {
+      expect(tab.terminalRef?.current?.sendInput).toHaveBeenCalledWith(
+        `${command}\r`,
+      );
+    }
+    expect(
+      screen.queryByText("panelAgent.highRiskApprovalRequired"),
+    ).toBeNull();
+    expect(screen.queryByText("panelAgent.toolBlocked")).toBeNull();
   });
 
   it("keeps a failed prompt retryable and replays it", async () => {
@@ -964,5 +771,42 @@ describe("PanelAgentPanel", () => {
 
     await screen.findByText("panelAgent.chatStopped");
     expect(requestSignal?.aborted).toBe(true);
+  });
+
+  it("only sends a bounded recent chat window to the backend", async () => {
+    panelAgentApi.sendPanelAgentChat
+      .mockResolvedValueOnce({
+        message: { role: "assistant", content: "a1", toolCalls: [] },
+      })
+      .mockResolvedValueOnce({
+        message: { role: "assistant", content: "a2", toolCalls: [] },
+      });
+    render(<PanelAgentPanel terminalTabs={[]} activeTabId="" />);
+    await screen.findByPlaceholderText("panelAgent.chatPlaceholder");
+
+    fireEvent.change(
+      screen.getByPlaceholderText("panelAgent.chatPlaceholder"),
+      {
+        target: { value: "first" },
+      },
+    );
+    fireEvent.click(screen.getByText("panelAgent.send"));
+    await screen.findByText("a1");
+
+    fireEvent.change(
+      screen.getByPlaceholderText("panelAgent.chatPlaceholder"),
+      {
+        target: { value: "second" },
+      },
+    );
+    fireEvent.click(screen.getByText("panelAgent.send"));
+    await screen.findByText("a2");
+
+    const secondPayload = panelAgentApi.sendPanelAgentChat.mock.calls[1][0];
+    expect(secondPayload.messages.at(-1)).toEqual({
+      role: "user",
+      content: "second",
+    });
+    expect(secondPayload.messages.length).toBeLessThanOrEqual(20);
   });
 });
