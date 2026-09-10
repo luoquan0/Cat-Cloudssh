@@ -417,20 +417,69 @@ export const GuacamoleDisplay = forwardRef<
       setIsReady(true);
     }
 
-    const sendMouseEvent = (event: Guacamole.Mouse.MouseEvent) => {
+    const buildMouseState = ({
+      x,
+      y,
+      left = false,
+      middle = false,
+      right = false,
+      up = false,
+      down = false,
+    }: {
+      x: number;
+      y: number;
+      left?: boolean;
+      middle?: boolean;
+      right?: boolean;
+      up?: boolean;
+      down?: boolean;
+    }) =>
+      new Guacamole.Mouse.State({
+        x,
+        y,
+        left,
+        middle,
+        right,
+        up,
+        down,
+      }) as Guacamole.Mouse.State;
+
+    const getRemotePointerPosition = (event: MouseEvent) => {
+      const rect = displayElement.getBoundingClientRect();
+      const displayWidth = display.getWidth();
+      const displayHeight = display.getHeight();
+      const scaleX = rect.width > 0 ? displayWidth / rect.width : 1;
+      const scaleY = rect.height > 0 ? displayHeight / rect.height : 1;
+      const x = Math.round((event.clientX - rect.left) * scaleX);
+      const y = Math.round((event.clientY - rect.top) * scaleY);
+
+      return {
+        x: Math.max(0, Math.min(displayWidth - 1, x)),
+        y: Math.max(0, Math.min(displayHeight - 1, y)),
+      };
+    };
+
+    const getButtonState = (event: MouseEvent) => ({
+      left: !!(event.buttons & 1),
+      right: !!(event.buttons & 2),
+      middle: !!(event.buttons & 4),
+    });
+
+    const sendMouseEvent = (event: { state: Guacamole.Mouse.State }) => {
       displayElement.focus({ preventScroll: true });
-      const scale = scaleRef.current;
+      const scale = scaleRef.current || 1;
       const state = event.state;
-      const adjustedState = new Guacamole.Mouse.State(
-        Math.round(state.x / scale),
-        Math.round(state.y / scale),
-        state.left,
-        state.middle,
-        state.right,
-        state.up,
-        state.down,
-      ) as Guacamole.Mouse.State;
-      client.sendMouseState(adjustedState);
+      client.sendMouseState(
+        buildMouseState({
+          x: Math.round(state.x / scale),
+          y: Math.round(state.y / scale),
+          left: state.left,
+          middle: state.middle,
+          right: state.right,
+          up: state.up,
+          down: state.down,
+        }),
+      );
     };
 
     if (touchMode === "touchscreen") {
@@ -440,22 +489,50 @@ export const GuacamoleDisplay = forwardRef<
       const touchpad = new Guacamole.Mouse.Touchpad(displayElement);
       touchpad.onEach(["mousedown", "mousemove", "mouseup"], sendMouseEvent);
     } else {
-      const mouse = new Guacamole.Mouse(displayElement);
-      const sendMouseState = (state: Guacamole.Mouse.State) => {
+      const sendDesktopMouseState = (event: MouseEvent) => {
+        if (clientRef.current !== client) return;
         displayElement.focus({ preventScroll: true });
-        const scale = scaleRef.current;
-        const adjustedState = new Guacamole.Mouse.State(
-          Math.round(state.x / scale),
-          Math.round(state.y / scale),
-          state.left,
-          state.middle,
-          state.right,
-          state.up,
-          state.down,
-        ) as Guacamole.Mouse.State;
-        client.sendMouseState(adjustedState);
+        event.preventDefault();
+        const position = getRemotePointerPosition(event);
+        client.sendMouseState(
+          buildMouseState({
+            ...position,
+            ...getButtonState(event),
+          }),
+        );
       };
-      mouse.onmousedown = mouse.onmouseup = mouse.onmousemove = sendMouseState;
+
+      const sendDesktopWheelState = (event: WheelEvent) => {
+        if (clientRef.current !== client) return;
+        displayElement.focus({ preventScroll: true });
+        event.preventDefault();
+        const position = getRemotePointerPosition(event);
+        const buttons = getButtonState(event);
+        const wheelDirection = event.deltaY < 0 ? "up" : "down";
+        client.sendMouseState(
+          buildMouseState({
+            ...position,
+            ...buttons,
+            [wheelDirection]: true,
+          }),
+        );
+        client.sendMouseState(
+          buildMouseState({
+            ...position,
+            ...buttons,
+          }),
+        );
+      };
+
+      displayElement.addEventListener("mousemove", sendDesktopMouseState);
+      displayElement.addEventListener("mousedown", sendDesktopMouseState);
+      displayElement.addEventListener("mouseup", sendDesktopMouseState);
+      displayElement.addEventListener("wheel", sendDesktopWheelState, {
+        passive: false,
+      });
+      displayElement.addEventListener("contextmenu", (event) =>
+        event.preventDefault(),
+      );
     }
 
     const keyboard = new Guacamole.Keyboard(displayElement);
