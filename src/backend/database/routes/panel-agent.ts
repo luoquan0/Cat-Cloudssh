@@ -30,12 +30,11 @@ interface PanelAgentChatAttachment {
   dataUrl?: string;
   text?: string;
 }
-const MAX_CONTEXT_BYTES_PER_TARGET = 24_000;
-const MAX_INSTRUCTION_LENGTH = 8_000;
+const MAX_CONTEXT_BYTES_PER_TARGET = 1_000_000;
+const MAX_INSTRUCTION_LENGTH = 1_000_000;
 const MAX_COMMANDS_PER_TARGET = 8;
 const MAX_COMMAND_LENGTH = 4_000;
-const MAX_CHAT_MESSAGES = 32;
-const MAX_TOOL_RESULT_LENGTH = 24_000;
+const MAX_TOOL_RESULT_LENGTH = 1_000_000;
 const MAX_PANEL_AGENT_MAX_TOKENS = 1_000_000;
 const MAX_PANEL_AGENT_TOOL_ROUNDS = 100;
 
@@ -467,7 +466,6 @@ function parseChatInput(body: unknown): PanelAgentChatInput {
     ? value.messages
         .map(sanitizeChatMessage)
         .filter((message): message is PanelAgentChatMessage => Boolean(message))
-        .slice(-MAX_CHAT_MESSAGES)
     : [];
   if (!messages.some((message) => message.role === "user")) {
     throw Object.assign(new Error("请输入 Agent 任务"), {

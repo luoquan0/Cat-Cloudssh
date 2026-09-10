@@ -58,7 +58,6 @@ import {
 import { MarkdownRenderer } from "@/features/file-manager/components/MarkdownRenderer";
 import type { Tab } from "@/types/ui-types";
 
-const DEFAULT_TOOL_ROUND_LIMIT = 20;
 const COMMAND_OBSERVE_DELAY_MS = 1_200;
 
 const PANEL_AGENT_SELECTED_MODEL_STORAGE_KEY = "panelAgentSelectedModel";
@@ -71,8 +70,6 @@ const MAX_CHAT_ATTACHMENTS = 6;
 const MAX_TEXT_ATTACHMENT_CHARS = 80_000;
 const MAX_IMAGE_ATTACHMENT_BYTES = 4 * 1024 * 1024;
 const MAX_STORED_CONVERSATIONS = 12;
-const MAX_API_CHAT_MESSAGES = 20;
-const MAX_TOOL_RESULT_CHARS = 12_000;
 
 const PANEL_AGENT_THINKING_MODES: PanelAgentReasoningEffort[] = [
   "auto",
@@ -181,20 +178,7 @@ function createMessageId() {
 function toApiMessages(
   messages: PanelAgentUiMessage[],
 ): PanelAgentChatMessage[] {
-  return messages
-    .slice(-MAX_API_CHAT_MESSAGES)
-    .map(({ id: _id, error: _error, ...message }) => {
-      if (
-        message.role === "tool" &&
-        message.content.length > MAX_TOOL_RESULT_CHARS
-      ) {
-        return {
-          ...message,
-          content: message.content.slice(-MAX_TOOL_RESULT_CHARS),
-        };
-      }
-      return message;
-    });
+  return messages.map(({ id: _id, error: _error, ...message }) => message);
 }
 
 function toUiMessages(
@@ -612,7 +596,7 @@ export function PanelAgentPanel({
           sessionId: context?.sessionId ?? tab.persistentSessionId ?? null,
           agentSessionId: context?.agentSessionId ?? tab.agentSessionId ?? null,
           connected: context?.connected ?? handle?.isConnected?.() ?? false,
-          recentOutput: handle?.getRecentOutput?.(500) ?? "",
+          recentOutput: handle?.getRecentOutput?.(5000) ?? "",
         };
       });
   }
@@ -650,7 +634,7 @@ export function PanelAgentPanel({
     if (toolCall.name === "read_terminal_context") {
       const maxLines = Math.max(
         20,
-        Math.min(500, numberArg(toolCall.arguments.maxLines, 160)),
+        Math.min(5000, numberArg(toolCall.arguments.maxLines, 1000)),
       );
       return toolResult(toolCall, {
         ok: true,
@@ -709,11 +693,7 @@ export function PanelAgentPanel({
     signal: AbortSignal,
   ) {
     let history = seedMessages;
-    const toolRoundLimit = Math.max(
-      1,
-      Math.round(settings?.toolRoundLimit ?? DEFAULT_TOOL_ROUND_LIMIT),
-    );
-    for (let round = 0; round < toolRoundLimit; round += 1) {
+    while (true) {
       signal.throwIfAborted();
       const response = await sendPanelAgentChat(
         {
@@ -742,14 +722,6 @@ export function PanelAgentPanel({
         setMessages(history);
       }
     }
-
-    const limitMessage: PanelAgentUiMessage = {
-      id: createMessageId(),
-      role: "assistant",
-      content: t("panelAgent.toolRoundLimit"),
-      toolCalls: [],
-    };
-    setMessages([...history, limitMessage]);
   }
 
   function chatErrorMessage(error: unknown) {

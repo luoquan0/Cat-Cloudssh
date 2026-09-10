@@ -773,40 +773,40 @@ describe("PanelAgentPanel", () => {
     expect(requestSignal?.aborted).toBe(true);
   });
 
-  it("only sends a bounded recent chat window to the backend", async () => {
-    panelAgentApi.sendPanelAgentChat
-      .mockResolvedValueOnce({
-        message: { role: "assistant", content: "a1", toolCalls: [] },
-      })
-      .mockResolvedValueOnce({
-        message: { role: "assistant", content: "a2", toolCalls: [] },
-      });
+  it("sends the full live chat history to the backend", async () => {
+    const storedMessages = Array.from({ length: 25 }, (_, index) => ({
+      role: index % 2 === 0 ? "user" : "assistant",
+      content: `stored-${index}`,
+    }));
+    localStorage.setItem(
+      "panelAgentLiveConversation",
+      JSON.stringify({ messages: storedMessages }),
+    );
+    panelAgentApi.sendPanelAgentChat.mockResolvedValueOnce({
+      message: { role: "assistant", content: "done", toolCalls: [] },
+    });
+
     render(<PanelAgentPanel terminalTabs={[]} activeTabId="" />);
     await screen.findByPlaceholderText("panelAgent.chatPlaceholder");
 
     fireEvent.change(
       screen.getByPlaceholderText("panelAgent.chatPlaceholder"),
       {
-        target: { value: "first" },
+        target: { value: "new request" },
       },
     );
     fireEvent.click(screen.getByText("panelAgent.send"));
-    await screen.findByText("a1");
+    await screen.findByText("done");
 
-    fireEvent.change(
-      screen.getByPlaceholderText("panelAgent.chatPlaceholder"),
-      {
-        target: { value: "second" },
-      },
-    );
-    fireEvent.click(screen.getByText("panelAgent.send"));
-    await screen.findByText("a2");
-
-    const secondPayload = panelAgentApi.sendPanelAgentChat.mock.calls[1][0];
-    expect(secondPayload.messages.at(-1)).toEqual({
+    const payload = panelAgentApi.sendPanelAgentChat.mock.calls[0][0];
+    expect(payload.messages.length).toBe(26);
+    expect(payload.messages[0]).toEqual({
       role: "user",
-      content: "second",
+      content: "stored-0",
     });
-    expect(secondPayload.messages.length).toBeLessThanOrEqual(20);
+    expect(payload.messages.at(-1)).toEqual({
+      role: "user",
+      content: "new request",
+    });
   });
 });
