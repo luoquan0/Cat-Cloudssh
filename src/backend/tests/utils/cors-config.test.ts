@@ -43,7 +43,7 @@ afterAll(async () => {
 
 afterEach(() => vi.unstubAllEnvs());
 
-function request(origin?: string) {
+function request(origin?: string, extraHeaders: Record<string, string> = {}) {
   return new Promise<{ status: number; allowOrigin?: string }>(
     (resolve, reject) => {
       const outgoing = http.request(
@@ -51,7 +51,7 @@ function request(origin?: string) {
           host: "127.0.0.1",
           port,
           path: "/check",
-          headers: origin ? { Origin: origin } : undefined,
+          headers: origin ? { Origin: origin, ...extraHeaders } : extraHeaders,
         },
         (response) => {
           response.resume();
@@ -104,5 +104,15 @@ describe("CORS 代理边界", () => {
 
     vi.stubEnv("NODE_ENV", "test");
     expect((await request("https://dev-tool.example")).status).toBe(200);
+  });
+
+  it("生产环境允许反代改写协议或端口后的同主机来源", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const response = await request("https://cloudssh.example.com", {
+      Host: "cloudssh.example.com:2244",
+      "X-Forwarded-Proto": "http",
+    });
+    expect(response.status).toBe(200);
+    expect(response.allowOrigin).toBe("https://cloudssh.example.com");
   });
 });

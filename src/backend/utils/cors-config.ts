@@ -14,6 +14,14 @@ function getAllowedOrigins(): string[] {
     .filter(Boolean);
 }
 
+function hostnameOf(value: string): string {
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
 export function createCorsMiddleware(
   methods: string[] = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   extraHeaders: string[] = [],
@@ -55,6 +63,18 @@ export function createCorsMiddleware(
 
         const sameOrigin = getRequestOrigin(req);
         if (origin === sameOrigin) return callback(null, true);
+
+        // Reverse proxies may terminate HTTPS or rewrite ports without sending
+        // every X-Forwarded-* header consistently. In production deployments the
+        // browser origin can therefore differ by scheme/port even though the
+        // request is still for the same public host. Allow same-host origins so
+        // RDP/VNC/Telnet token requests do not fail with a generic server error.
+        if (
+          hostnameOf(origin) &&
+          hostnameOf(origin) === hostnameOf(sameOrigin)
+        ) {
+          return callback(null, true);
+        }
 
         callback(new Error("Not allowed by CORS"));
       },
