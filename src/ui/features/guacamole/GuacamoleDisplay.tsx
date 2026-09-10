@@ -110,13 +110,15 @@ export const GuacamoleDisplay = forwardRef<
     sendMouse: (x: number, y: number, buttonMask: number) => {
       if (clientRef.current) {
         clientRef.current.sendMouseState(
-          new Guacamole.Mouse.State({
+          new Guacamole.Mouse.State(
             x,
             y,
-            left: !!(buttonMask & 1),
-            middle: !!(buttonMask & 2),
-            right: !!(buttonMask & 4),
-          }),
+            !!(buttonMask & 1),
+            !!(buttonMask & 2),
+            !!(buttonMask & 4),
+            false,
+            false,
+          ),
         );
       }
     },
@@ -379,6 +381,7 @@ export const GuacamoleDisplay = forwardRef<
 
     displayElement.setAttribute("tabindex", "0");
     displayElement.style.outline = "none";
+    displayElement.style.cursor = "default";
 
     const useNativePasteFallback = isFirefoxBrowser();
     if (useNativePasteFallback) {
@@ -412,10 +415,25 @@ export const GuacamoleDisplay = forwardRef<
       setIsReady(true);
     };
 
+    display.oncursor = () => {
+      displayElement.style.cursor = "default";
+    };
+
     const protocol = connectionConfig.protocol ?? connectionConfig.type;
     if (protocol === "telnet" && isMountedRef.current) {
       setIsReady(true);
     }
+
+    const shouldDebugMouse = () => {
+      try {
+        return (
+          new URLSearchParams(window.location.search).has("debugGuacMouse") ||
+          window.localStorage.getItem("debugGuacMouse") === "1"
+        );
+      } catch {
+        return false;
+      }
+    };
 
     const buildMouseState = ({
       x,
@@ -434,7 +452,7 @@ export const GuacamoleDisplay = forwardRef<
       up?: boolean;
       down?: boolean;
     }) =>
-      new Guacamole.Mouse.State({
+      new Guacamole.Mouse.State(
         x,
         y,
         left,
@@ -442,7 +460,7 @@ export const GuacamoleDisplay = forwardRef<
         right,
         up,
         down,
-      }) as Guacamole.Mouse.State;
+      ) as Guacamole.Mouse.State;
 
     const getRemotePointerPosition = (event: MouseEvent) => {
       const rect = displayElement.getBoundingClientRect();

@@ -139,12 +139,17 @@ const GuacamoleAppInner = React.forwardRef<
   const [error, setError] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-  const [touchMode, setTouchMode] = useState<GuacamoleTouchMode | null>(() =>
-    typeof window !== "undefined" &&
-    (navigator.maxTouchPoints > 0 || "ontouchstart" in window)
+  const [touchMode, setTouchMode] = useState<GuacamoleTouchMode | null>(() => {
+    if (typeof window === "undefined") return null;
+
+    const hasFinePointer = window.matchMedia?.("(pointer: fine)").matches;
+    const hasCoarsePointer = window.matchMedia?.("(pointer: coarse)").matches;
+    const hasTouchInput = navigator.maxTouchPoints > 0;
+
+    return hasTouchInput && hasCoarsePointer && !hasFinePointer
       ? "touchscreen"
-      : null,
-  );
+      : null;
+  });
   const displayRef = useRef<GuacamoleDisplayHandle>(null);
 
   const resolvedProtocolForConnect = (protocol ??
