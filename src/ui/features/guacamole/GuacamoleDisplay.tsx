@@ -754,7 +754,7 @@ export const GuacamoleDisplay = forwardRef<
         ref={displayRef}
         className="relative w-full h-full flex items-center justify-center"
         style={{
-          cursor: isReady ? "none" : "default",
+          cursor: "default",
           visibility: isReady ? "visible" : "hidden",
         }}
       />
