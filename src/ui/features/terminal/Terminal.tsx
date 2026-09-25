@@ -287,7 +287,6 @@ const TerminalInner = forwardRef<TerminalHandle, SSHTerminalProps>(
     const resizeTimeout = useRef<NodeJS.Timeout | null>(null);
     const wasDisconnectedBySSH = useRef(false);
     const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-    const pongReceivedRef = useRef(true);
     const pongTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const [isConnected, setIsConnected] = useState(false);
     const [shareModalOpen, setShareModalOpen] = useState(false);
@@ -1767,17 +1766,14 @@ const TerminalInner = forwardRef<TerminalHandle, SSHTerminalProps>(
           },
         );
 
-        pongReceivedRef.current = true;
+        // Keep the application-level ping as a lightweight traffic/health hint,
+        // but do not use a renderer timer to decide that the socket is dead.
+        // Background-tab throttling and heavy Agent output can delay the JSON
+        // pong handler even while the WebSocket and SSH transport are healthy.
+        // The backend protocol-level Ping/Pong heartbeat is the authoritative
+        // liveness check and has its own consecutive-miss tolerance.
         pingIntervalRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
-            if (!pongReceivedRef.current) {
-              console.warn(
-                "[WebSocket] Pong timeout - connection appears dead, closing",
-              );
-              ws.close();
-              return;
-            }
-            pongReceivedRef.current = false;
             ws.send(JSON.stringify({ type: "ping" }));
           }
         }, 30000);
@@ -1788,7 +1784,6 @@ const TerminalInner = forwardRef<TerminalHandle, SSHTerminalProps>(
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === "pong") {
-            pongReceivedRef.current = true;
             return;
           }
           if (msg.type === "data") {
