@@ -65,6 +65,40 @@ describe("owner session heartbeat", () => {
     }
   });
 
+  it("tolerates delayed protocol pong responses before declaring the socket dead", async () => {
+    vi.useFakeTimers();
+    try {
+      const ws = createFakeWebSocket();
+      const onPongTimeout = vi.fn();
+      const heartbeat = startOwnerSessionHeartbeat({
+        ws,
+        getCurrentOwnerSession: () => null,
+        hasCurrentHostAccess: vi.fn().mockResolvedValue(true),
+        onAccessRevoked: vi.fn(),
+        onPongTimeout,
+        intervalMs: 1_000,
+        maxMissedPongs: 3,
+      });
+
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(ws.ping).toHaveBeenCalledTimes(3);
+      expect(onPongTimeout).not.toHaveBeenCalled();
+
+      // A late Pong resets the miss counter instead of letting the next timer
+      // tick terminate a live connection.
+      ws.emit("pong");
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(ws.ping).toHaveBeenCalledTimes(6);
+      expect(onPongTimeout).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(onPongTimeout).toHaveBeenCalledOnce();
+      heartbeat.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("disconnects an expired web login without requiring an owner session", async () => {
     vi.useFakeTimers();
     try {
