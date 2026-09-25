@@ -9,6 +9,8 @@ export interface OwnerSessionHeartbeatOptions<TSession extends { id: string }> {
   onAuthenticationExpired?: () => void;
   onPongTimeout: () => void;
   intervalMs?: number;
+  /** Number of consecutive heartbeat intervals that may miss a Pong before the socket is terminated. */
+  maxMissedPongs?: number;
 }
 
 export interface OwnerSessionHeartbeat {
@@ -16,6 +18,7 @@ export interface OwnerSessionHeartbeat {
 }
 
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 30_000;
+const DEFAULT_MAX_MISSED_PONGS = 3;
 
 export function startOwnerSessionHeartbeat<TSession extends { id: string }>(
   options: OwnerSessionHeartbeatOptions<TSession>,
@@ -29,14 +32,19 @@ export function startOwnerSessionHeartbeat<TSession extends { id: string }>(
     onAuthenticationExpired,
     onPongTimeout,
     intervalMs = DEFAULT_HEARTBEAT_INTERVAL_MS,
+    maxMissedPongs = DEFAULT_MAX_MISSED_PONGS,
   } = options;
-  let wsAlive = true;
+  const missedPongLimit =
+    Number.isFinite(maxMissedPongs) && maxMissedPongs > 0
+      ? Math.floor(maxMissedPongs)
+      : DEFAULT_MAX_MISSED_PONGS;
+  let missedPongs = 0;
   let stopped = false;
   let accessCheckInFlight: Promise<void> | null = null;
   let authenticationCheckInFlight: Promise<void> | null = null;
 
   const handlePong = () => {
-    wsAlive = true;
+    missedPongs = 0;
   };
 
   const stop = () => {
@@ -93,13 +101,17 @@ export function startOwnerSessionHeartbeat<TSession extends { id: string }>(
       stop();
       return;
     }
-    if (!wsAlive) {
+    // Do not kill an otherwise healthy terminal after one delayed Pong. Browser
+    // tabs and the Node event loop can both be briefly delayed by large Agent
+    // output bursts, background-tab throttling, or GC. Requiring several
+    // consecutive misses still detects dead peers while avoiding false drops.
+    if (missedPongs >= missedPongLimit) {
       stop();
       onPongTimeout();
       return;
     }
 
-    wsAlive = false;
+    missedPongs += 1;
     ws.ping();
     // 登录过期只关闭浏览器附件，不销毁后台 SSH 或远端 tmux。
     verifyAuthenticationAccess();
