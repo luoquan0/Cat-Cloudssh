@@ -31,6 +31,8 @@ __pycache__/
 /uploads/
 /backups/
 /secrets/
+/runtime/
+/releases/
 /.deploy/
 /nul
 .env
