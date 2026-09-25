@@ -287,6 +287,7 @@ const TerminalInner = forwardRef<TerminalHandle, SSHTerminalProps>(
     const resizeTimeout = useRef<NodeJS.Timeout | null>(null);
     const wasDisconnectedBySSH = useRef(false);
     const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const missedApplicationPongsRef = useRef(0);
     const pongTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const [isConnected, setIsConnected] = useState(false);
     const [shareModalOpen, setShareModalOpen] = useState(false);
@@ -1766,14 +1767,21 @@ const TerminalInner = forwardRef<TerminalHandle, SSHTerminalProps>(
           },
         );
 
-        // Keep the application-level ping as a lightweight traffic/health hint,
-        // but do not use a renderer timer to decide that the socket is dead.
-        // Background-tab throttling and heavy Agent output can delay the JSON
-        // pong handler even while the WebSocket and SSH transport are healthy.
-        // The backend protocol-level Ping/Pong heartbeat is the authoritative
-        // liveness check and has its own consecutive-miss tolerance.
+        // Browser timers and message handlers can be delayed by background-tab
+        // throttling, GC, or heavy Agent output. A single delayed JSON pong must
+        // not tear down an otherwise healthy SSH attachment. Keep client-side
+        // dead-server detection, but require several consecutive misses.
+        missedApplicationPongsRef.current = 0;
         pingIntervalRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
+            if (missedApplicationPongsRef.current >= 3) {
+              console.warn(
+                "[WebSocket] Repeated pong timeout - connection appears dead, closing",
+              );
+              ws.close();
+              return;
+            }
+            missedApplicationPongsRef.current += 1;
             ws.send(JSON.stringify({ type: "ping" }));
           }
         }, 30000);
@@ -1784,6 +1792,7 @@ const TerminalInner = forwardRef<TerminalHandle, SSHTerminalProps>(
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === "pong") {
+            missedApplicationPongsRef.current = 0;
             return;
           }
           if (msg.type === "data") {
