@@ -1137,9 +1137,9 @@ describe("终端会话重连", () => {
       act(() => socket.open());
       act(() => socket.message({ type: "connected" }));
 
-      // Intentionally never deliver the application-level JSON pong. The
-      // renderer heartbeat is only a keepalive hint; protocol Ping/Pong on the
-      // backend owns dead-peer detection.
+      // Intentionally never deliver the application-level JSON pong. Three
+      // consecutive misses are tolerated so a delayed browser task/message
+      // cannot tear down a healthy Agent SSH attachment after a single miss.
       await act(async () => {
         await vi.advanceTimersByTimeAsync(90_000);
       });
