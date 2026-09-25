@@ -1115,6 +1115,45 @@ describe("Agent 会话单写租约", () => {
 });
 
 describe("终端会话重连", () => {
+  it("Agent 输出繁忙导致应用层 pong 延迟时不会主动关闭健康连接", async () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <Terminal
+          hostConfig={{
+            id: 42,
+            instanceId: "agent-tab-42",
+            agentSessionId: "agent-session-42",
+            ip: "192.0.2.42",
+            port: 22,
+            username: "tester",
+          }}
+          isVisible={true}
+        />,
+      );
+
+      await vi.waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+      const socket = MockWebSocket.instances[0];
+      act(() => socket.open());
+      act(() => socket.message({ type: "connected" }));
+
+      // Intentionally never deliver the application-level JSON pong. The
+      // renderer heartbeat is only a keepalive hint; protocol Ping/Pong on the
+      // backend owns dead-peer detection.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(90_000);
+      });
+
+      expect(socket.readyState).toBe(MockWebSocket.OPEN);
+      expect(MockWebSocket.instances).toHaveLength(1);
+      expect(
+        sentMessages(socket).filter((message) => message.type === "ping"),
+      ).toHaveLength(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("浏览器异常断线后重新附加现有会话而不创建新 SSH", async () => {
     const { socket } = await renderConnectedTerminal();
     act(() => socket.message({ type: "connected" }));
