@@ -12,9 +12,7 @@ describe("CloudSSH 快速镜像构建工作流", () => {
     expect(workflow).toContain("branches:\n      - main");
     expect(workflow).toContain("workflow_dispatch: {}");
     expect(workflow).toContain("packages: write");
-    expect(workflow).toContain(
-      "github.repository == 'luoquan0/Cat-Cloudssh'",
-    );
+    expect(workflow).toContain("github.repository == 'luoquan0/Cat-Cloudssh'");
     expect(workflow).not.toContain("moeacgx/cloudssh");
     expect(workflow).toContain("persist-credentials: false");
     expect(workflow).toContain(

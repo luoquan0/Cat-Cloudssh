@@ -538,7 +538,10 @@ export function CommandPalette({
               <div className="grid grid-cols-1 gap-1">
                 <CommandItem
                   onSelect={() =>
-                    window.open("https://github.com/luoquan0/Cat-Cloudssh", "_blank")
+                    window.open(
+                      "https://github.com/luoquan0/Cat-Cloudssh",
+                      "_blank",
+                    )
                   }
                   className="flex items-center gap-3 px-3 py-2 rounded-none hover:bg-accent-brand/10 cursor-pointer"
                 >
