@@ -321,7 +321,11 @@ describe("PanelAgentPanel", () => {
 
   it("starts a new chat even when conversation history storage exceeds quota", async () => {
     panelAgentApi.sendPanelAgentChat.mockResolvedValue({
-      message: { role: "assistant", content: "quota-safe answer", toolCalls: [] },
+      message: {
+        role: "assistant",
+        content: "quota-safe answer",
+        toolCalls: [],
+      },
     });
 
     render(<PanelAgentPanel terminalTabs={[]} activeTabId="" />);

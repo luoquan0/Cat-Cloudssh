@@ -276,10 +276,7 @@ function compactMessageForStorage(
     dataUrl: undefined,
     text:
       typeof attachment.text === "string"
-        ? truncateStoredText(
-            attachment.text,
-            MAX_STORED_TEXT_ATTACHMENT_CHARS,
-          )
+        ? truncateStoredText(attachment.text, MAX_STORED_TEXT_ATTACHMENT_CHARS)
         : undefined,
   }));
 
@@ -288,10 +285,7 @@ function compactMessageForStorage(
     content:
       message.role === "tool"
         ? compactToolContentForStorage(message.content)
-        : truncateStoredText(
-            message.content,
-            MAX_STORED_MESSAGE_CONTENT_CHARS,
-          ),
+        : truncateStoredText(message.content, MAX_STORED_MESSAGE_CONTENT_CHARS),
     attachments,
   };
 }
@@ -304,10 +298,7 @@ function compactMessagesForStorage(
     .map(compactMessageForStorage)
     .slice(-MAX_STORED_MESSAGES_PER_CONVERSATION);
 
-  while (
-    compacted.length > 1 &&
-    JSON.stringify(compacted).length > maxChars
-  ) {
+  while (compacted.length > 1 && JSON.stringify(compacted).length > maxChars) {
     compacted = compacted.slice(1);
   }
   return compacted;
@@ -386,9 +377,7 @@ function compactConversationHistoryForStorage(
       messages: compactMessagesForStorage(conversation.messages, 160_000),
     };
     const next = [...compacted, candidate];
-    if (
-      JSON.stringify(next).length > MAX_STORED_CONVERSATION_HISTORY_CHARS
-    ) {
+    if (JSON.stringify(next).length > MAX_STORED_CONVERSATION_HISTORY_CHARS) {
       break;
     }
     compacted.push(candidate);

@@ -440,7 +440,10 @@ function AppShellContent({
       if (id == null) return null;
       return tabs.find((t) => t.id === id)?.instanceId ?? null;
     });
-    safeSetAppShellStorage("termix_paneInstanceIds", JSON.stringify(instanceIds));
+    safeSetAppShellStorage(
+      "termix_paneInstanceIds",
+      JSON.stringify(instanceIds),
+    );
   }, [paneTabIds, tabs]);
 
   const isMobile = useIsMobile();
@@ -868,7 +871,10 @@ function AppShellContent({
             };
             for (const key of SNAPSHOT_KEYS)
               snap[key] = localStorage.getItem(key);
-            safeSetAppShellStorage("termix-local-snapshot", JSON.stringify(snap));
+            safeSetAppShellStorage(
+              "termix-local-snapshot",
+              JSON.stringify(snap),
+            );
           }
           if (prefs.theme) setTheme(prefs.theme as ThemeId);
           if (prefs.fontSize) applyFontSize(prefs.fontSize as FontSizeId);
