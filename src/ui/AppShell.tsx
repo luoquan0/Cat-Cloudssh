@@ -1185,6 +1185,7 @@ function AppShellContent({
   // On load: always read saved tabs from DB so background sessions are preserved across refreshes.
   // If reopenTabsOnLogin is on, also restore them as open tabs in the tab bar.
   const tabRestoreAttemptedRef = useRef(false);
+  const agentTabRecoveryValidatedRef = useRef(false);
   useEffect(() => {
     if (!hostsLoaded || !userPrefsLoaded) return;
     if (tabRestoreAttemptedRef.current) return;
@@ -1193,9 +1194,10 @@ function AppShellContent({
     async function loadSavedTabs() {
       try {
         const [savedTabsResult, activeSessions] = await Promise.all([
-          getOpenTabs(),
+          getOpenTabs().catch(() => [] as OpenTabRecord[]),
           getActiveSessions(),
         ]);
+        agentTabRecoveryValidatedRef.current = true;
         const savedTabs = Array.isArray(savedTabsResult) ? savedTabsResult : [];
         const storedAgentTabs = readStoredAgentTabs();
 
@@ -1373,7 +1375,7 @@ function AppShellContent({
   // in-memory UI state (reload/error-boundary remount) must not orphan a still-running
   // Agent session. Keep only tiny, non-secret attachment metadata for this browser tab.
   useEffect(() => {
-    if (!tabsReady) return;
+    if (!tabsReady || !agentTabRecoveryValidatedRef.current) return;
     writeStoredAgentTabs(tabs);
   }, [tabs, tabsReady]);
 
