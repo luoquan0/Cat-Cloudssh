@@ -23,15 +23,15 @@
 
     <screenshots>
         <screenshot type="default">
-            <image>https://raw.githubusercontent.com/moeacgx/cloudssh/main/public/screenshots/terminal.png</image>
+            <image>https://raw.githubusercontent.com/luoquan0/Cat-Cloudssh/main/public/screenshots/terminal.png</image>
             <caption>SSH Terminal Interface</caption>
         </screenshot>
     </screenshots>
 
-    <url type="homepage">https://github.com/moeacgx/cloudssh</url>
-    <url type="bugtracker">https://github.com/moeacgx/cloudssh/issues</url>
-    <url type="help">https://github.com/moeacgx/cloudssh#readme</url>
-    <url type="vcs-browser">https://github.com/moeacgx/cloudssh</url>
+    <url type="homepage">https://github.com/luoquan0/Cat-Cloudssh</url>
+    <url type="bugtracker">https://github.com/luoquan0/Cat-Cloudssh/issues</url>
+    <url type="help">https://github.com/luoquan0/Cat-Cloudssh#readme</url>
+    <url type="vcs-browser">https://github.com/luoquan0/Cat-Cloudssh</url>
 
     <content_rating type="oars-1.1">
         <content_attribute id="social-info">moderate</content_attribute>
@@ -42,7 +42,7 @@
             <description>
                 <p>Latest release of Termix</p>
             </description>
-            <url>https://github.com/moeacgx/cloudssh/releases</url>
+            <url>https://github.com/luoquan0/Cat-Cloudssh/releases</url>
         </release>
     </releases>
 
