@@ -46,6 +46,38 @@ describe("CloudSSH 正式发版工作流", () => {
     expect(workflow).toContain('gh release verify "$TAG"');
   });
 
+  it("发布与在线更新只信任 Cat-Cloudssh 当前仓库", async () => {
+    const [releaseWorkflow, exportWorkflow, selfUpdater, hostUpdater] =
+      await Promise.all([
+        readFile(".github/workflows/cloudssh-release.yml", "utf8"),
+        readFile(".github/workflows/cloudssh-export-image.yml", "utf8"),
+        readFile("src/backend/update/self-updater.ts", "utf8"),
+        readFile("scripts/cloudssh-host-image-update.sh", "utf8"),
+      ]);
+
+    for (const source of [
+      releaseWorkflow,
+      exportWorkflow,
+      selfUpdater,
+      hostUpdater,
+    ]) {
+      expect(source).not.toContain("moeacgx/cloudssh");
+    }
+
+    expect(releaseWorkflow).toContain(
+      "github.repository == 'luoquan0/Cat-Cloudssh'",
+    );
+    expect(exportWorkflow).toContain(
+      "github.repository == 'luoquan0/Cat-Cloudssh'",
+    );
+    expect(selfUpdater).toContain(
+      "https://github.com/luoquan0/Cat-Cloudssh/releases/download",
+    );
+    expect(selfUpdater).toContain("ghcr.io/luoquan0/cloudssh");
+    expect(hostUpdater).toContain('REPOSITORY="luoquan0/Cat-Cloudssh"');
+    expect(hostUpdater).toContain("ghcr.io/luoquan0/cloudssh");
+  });
+
   it("第三方 Action 全部固定到完整提交", async () => {
     const workflow = await readFile(
       ".github/workflows/cloudssh-release.yml",
