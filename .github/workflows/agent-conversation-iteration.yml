@@ -1,0 +1,66 @@
+name: Validate server conversation iteration
+
+on:
+  push:
+    branches:
+      - feat/server-agent-conversations
+
+concurrency:
+  group: server-conversation-iteration
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    if: github.repository == 'luoquan0/Cat-Cloudssh'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
+      BASE_SHA: 350cc9e3b70295c0342080787e5a21ce984d3dd9
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Apply reviewed integration changes
+        run: |
+          set -euo pipefail
+          node scripts/prepare-conversation-tests.mjs
+          rm scripts/apply-agent-conversations.mjs scripts/prepare-conversation-tests.mjs
+          rm .github/workflows/agent-conversation-iteration.yml
+      - run: npm ci
+      - name: Format changed source files
+        run: |
+          set -euo pipefail
+          git diff --name-only --diff-filter=ACMR "$BASE_SHA" -- '*.ts' '*.tsx' '*.json' '*.md' '*.yml' |
+          while IFS= read -r file; do
+            npx prettier --write "$file"
+          done
+          git diff --check
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run type-check
+      - run: npm test
+      - run: npm run test:skill
+      - run: npm run build
+      - name: Publish only the tested source tree to the iteration branch
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$BASE_SHA"
+          git add -u
+          TREE="$(git write-tree)"
+          export GIT_AUTHOR_NAME='Zerotwo617'
+          export GIT_AUTHOR_EMAIL='289179459+Zerotwo617@users.noreply.github.com'
+          export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
+          export GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+          COMMIT="$(git commit-tree "$TREE" -p "$BASE_SHA" -m 'feat(agent): server-side conversation history and non-destructive summaries' -m 'Add owner-scoped durable transcripts, host permission checks, searchable history, delete/rename/export, explicit legacy import, revision conflict detection and summary-only context compaction. Release 2.6.0-cloudssh.56.')"
+          git push --force-with-lease="refs/heads/feat/server-agent-conversations:$GITHUB_SHA" origin "$COMMIT:refs/heads/feat/server-agent-conversations"
+          printf 'Tested commit: `%s`\n\nTree: `%s`\n' "$COMMIT" "$TREE" >> "$GITHUB_STEP_SUMMARY"
+          echo "TESTED_COMMIT=$COMMIT"
