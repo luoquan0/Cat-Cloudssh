@@ -31,7 +31,7 @@ import {
 import {
   PanelAgentPanel,
   type PanelAgentConversationAction,
-} from "@/sidebar/PanelAgentPanel";
+} from "@/sidebar/ServerPanelAgentPanel";
 import type { Host, Tab } from "@/types/ui-types";
 
 type UtilityView = "activity" | null;

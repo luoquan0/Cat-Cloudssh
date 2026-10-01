@@ -14,7 +14,7 @@ vi.mock("@/workspace/WorkspaceContext", () => ({
   }),
 }));
 
-vi.mock("@/sidebar/PanelAgentPanel", () => ({
+vi.mock("@/sidebar/ServerPanelAgentPanel", () => ({
   PanelAgentPanel: ({
     embedded,
     compact,

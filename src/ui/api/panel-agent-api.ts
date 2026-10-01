@@ -95,6 +95,8 @@ export type PanelAgentChatMessage = {
 };
 
 export type PanelAgentChatInput = {
+  conversationId?: string;
+  conversationRevision?: number;
   messages: PanelAgentChatMessage[];
   skillIds?: string[];
   targets: PanelAgentTargetInput[];
@@ -104,6 +106,7 @@ export type PanelAgentChatInput = {
 
 export type PanelAgentChatResponse = {
   message: {
+    id?: string;
     role: "assistant";
     content: string;
     toolCalls: PanelAgentToolCall[];

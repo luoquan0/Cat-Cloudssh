@@ -12,6 +12,9 @@ https://youtu.be/g0QjNdV3YYY
 
 <!-- UPDATE_LOG -->
 
+- CloudSSH .56: persist Panel Agent conversations per user/server in the application database, with paginated history, rename, confirmed deletion, JSON export and explicit browser-history import.
+- Add manual/automatic semantic summaries without deleting original messages, durable save acknowledgements, optimistic concurrency and recovery of interrupted tool turns.
+
 - Added Agent `platform` sessions that keep SSH running through the CloudSSH panel without requiring tmux, while retaining tmux mode for recovery across CloudSSH restarts.
 - Added browser attachment to the exact Agent platform terminal, including shared output, single-writer lease takeover, resize, and Agent runtime labels in the connections list.
 - Added Agent SFTP list, read, upload, download, mkdir, rename, and delete operations with project scopes, local-path-only transfers, audit records, and bounded concurrency.

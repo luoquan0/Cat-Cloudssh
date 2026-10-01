@@ -58,6 +58,9 @@ import {
 import { MarkdownRenderer } from "@/features/file-manager/components/MarkdownRenderer";
 import type { Tab } from "@/types/ui-types";
 
+import { conversationDefaultTarget } from "./conversation-target";
+import type { PanelConversationBridge } from "./PanelConversationBridge";
+
 const COMMAND_OBSERVE_DELAY_MS = 1_200;
 
 const PANEL_AGENT_SELECTED_MODEL_STORAGE_KEY = "panelAgentSelectedModel";
@@ -678,19 +681,21 @@ export function PanelAgentPanel({
   embedded = false,
   compact = false,
   conversationAction = null,
+  persistence,
 }: {
   terminalTabs: Tab[];
   activeTabId: string;
   embedded?: boolean;
   compact?: boolean;
   conversationAction?: PanelAgentConversationAction | null;
+  persistence?: PanelConversationBridge;
 }) {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<PanelAgentSettings | null>(null);
   const [draft, setDraft] = useState("");
   const [selectedTabIds, setSelectedTabIds] = useState<Set<string>>(new Set());
   const [messages, setMessages] = useState<PanelAgentUiMessage[]>(
-    readStoredLiveConversation,
+    () => persistence?.initialMessages ?? readStoredLiveConversation(),
   );
   const [working, setWorking] = useState(false);
   const [selectedModel, setSelectedModel] = useState(readStoredSelectedModel);
@@ -702,8 +707,8 @@ export function PanelAgentPanel({
   );
   const [historyOpen, setHistoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [conversationHistory, setConversationHistory] = useState(
-    readStoredConversationHistory,
+  const [conversationHistory, setConversationHistory] = useState(() =>
+    persistence ? [] : readStoredConversationHistory(),
   );
   const [selectedSkillIds, setSelectedSkillIds] = useState<Set<string>>(
     new Set(),
@@ -728,17 +733,37 @@ export function PanelAgentPanel({
   }, [t]);
 
   useEffect(() => {
-    writeStoredLiveConversation(messages);
-  }, [messages]);
+    if (persistence) persistence.onMessages(messages);
+    else writeStoredLiveConversation(messages);
+  }, [messages, persistence]);
 
   useEffect(() => {
     // Also compacts legacy unbounded history snapshots on first mount.
-    writeStoredConversationHistory(conversationHistory);
-  }, [conversationHistory]);
+    if (!persistence) writeStoredConversationHistory(conversationHistory);
+  }, [conversationHistory, persistence]);
+
+  useEffect(() => {
+    persistence?.onWorking(working);
+  }, [working, persistence]);
+  useEffect(
+    () => () => {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (persistence?.initialMessages) setMessages(persistence.initialMessages);
+  }, [persistence?.initialMessages]);
+  useEffect(() => {
+    persistence?.onModel(selectedModel);
+  }, [selectedModel, persistence]);
 
   const activeTerminalTab = useMemo(
-    () => terminalTabs.find((tab) => tab.id === activeTabId) ?? terminalTabs[0],
-    [activeTabId, terminalTabs],
+    () =>
+      conversationDefaultTarget(terminalTabs, activeTabId, persistence?.hostId),
+    [activeTabId, terminalTabs, persistence?.hostId],
   );
 
   useEffect(() => {
@@ -962,9 +987,13 @@ export function PanelAgentPanel({
     let history = seedMessages;
     while (true) {
       signal.throwIfAborted();
+      const prepared = persistence
+        ? await persistence.prepare(history, selectedModel.trim(), signal)
+        : { messages: toBoundedRequestMessages(history) };
+      signal.throwIfAborted();
       const response = await sendPanelAgentChat(
         {
-          messages: toBoundedRequestMessages(history),
+          ...prepared,
           skillIds: [...selectedSkillIds],
           targets: selectedTargets(),
           model: selectedModel.trim() || undefined,
@@ -975,18 +1004,23 @@ export function PanelAgentPanel({
       signal.throwIfAborted();
       const assistantMessage: PanelAgentUiMessage = {
         ...response.message,
-        id: createMessageId(),
+        id: response.message.id ?? createMessageId(),
       };
       history = [...history, assistantMessage];
       setMessages(history);
+      await persistence?.flush(history, selectedModel.trim());
+      signal.throwIfAborted();
       if ((assistantMessage.toolCalls?.length ?? 0) === 0) return;
 
       for (const toolCall of assistantMessage.toolCalls ?? []) {
         signal.throwIfAborted();
         const result = await executeToolCall(toolCall);
-        signal.throwIfAborted();
         history = [...history, { ...result, id: createMessageId() }];
-        setMessages(history);
+        // Record the observation even when Stop was pressed during execution.
+        // Cancellation cannot undo a command already sent to SSH.
+        if (abortControllerRef.current?.signal === signal) setMessages(history);
+        await persistence?.flush(history, selectedModel.trim());
+        signal.throwIfAborted();
       }
     }
   }
@@ -1073,6 +1107,7 @@ export function PanelAgentPanel({
   }
 
   async function handleSend() {
+    if (persistence?.disabled || working) return;
     const content = draft.trim();
     if (!content && attachments.length === 0) {
       toast.error(t("panelAgent.instructionRequired"));
@@ -1094,6 +1129,14 @@ export function PanelAgentPanel({
   }
 
   function retryFromMessage(index: number) {
+    if (persistence?.disabled || working) return;
+    if (persistence) {
+      const old = messages[index];
+      if (!old || old.role !== "user") return;
+      const repeated = { ...old, id: createMessageId(), error: undefined };
+      void startConversation([...messages, repeated], repeated.id);
+      return;
+    }
     const message = messages[index];
     if (!message || message.role !== "user") return;
     const nextMessages = messages
@@ -1129,6 +1172,11 @@ export function PanelAgentPanel({
   }
 
   function clearConversation() {
+    if (persistence) {
+      if (working || persistence.disabled) return;
+      persistence.onClear();
+      return;
+    }
     abortConversation();
     setMessages([]);
     setAttachments([]);
@@ -1137,6 +1185,11 @@ export function PanelAgentPanel({
   }
 
   function newConversation() {
+    if (persistence) {
+      if (working || persistence.disabled) return;
+      persistence.onNew();
+      return;
+    }
     abortConversation();
     archiveCurrentConversation();
     setMessages([]);
@@ -1527,6 +1580,7 @@ export function PanelAgentPanel({
   }
 
   function renderHistoryPanel() {
+    if (persistence) return persistence.history;
     return (
       <div data-testid="panel-agent-history" className="space-y-2 text-xs">
         <div className="flex items-center justify-between gap-2">
@@ -1725,6 +1779,7 @@ export function PanelAgentPanel({
               </div>
             </div>
           )}
+          {persistence?.toolbar}
           {renderFloatingPanel()}
           <div
             data-testid="panel-agent-message-list"
@@ -1794,6 +1849,7 @@ export function PanelAgentPanel({
           )}
           <Textarea
             value={draft}
+            disabled={persistence?.disabled}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={handleDraftKeyDown}
             placeholder={t("panelAgent.chatPlaceholder")}
@@ -1874,7 +1930,7 @@ export function PanelAgentPanel({
                 }
                 void handleSend();
               }}
-              disabled={!working && sendDisabled}
+              disabled={!working && (sendDisabled || persistence?.disabled)}
               aria-label={working ? t("panelAgent.stop") : t("panelAgent.send")}
             >
               {working ? (
