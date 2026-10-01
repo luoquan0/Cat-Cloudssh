@@ -23,7 +23,7 @@ Socket。正式版本从公开 GitHub Release 匿名下载，运行包在激活�
 
 `auto` 和 `binary` 模式下，管理员完成近期 MFA 后点击更新，系统依次执行：
 
-1. 从 `moeacgx/cloudssh` 的固定 Release 标签读取顶层发布清单。
+1. 从 `luoquan0/Cat-Cloudssh` 的固定 Release 标签读取顶层发布清单。
 2. 用顶层清单的 SHA-256 绑定运行包清单，并校验版本、提交和入口协议。
 3. 校验 Node 主版本、原生模块 ABI 与 glibc 契约；不兼容时要求使用镜像更新。
 4. 根据容器架构选择 `amd64` 或 `arm64` 运行包。
@@ -74,7 +74,7 @@ Socket。正式版本从公开 GitHub Release 匿名下载，运行包在激活�
   "schemaVersion": 3,
   "channel": "stable",
   "version": "2.6.0-cloudssh.54",
-  "image": "ghcr.io/moeacgx/cloudssh",
+  "image": "ghcr.io/luoquan0/cloudssh",
   "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "revision": "0123456789abcdef0123456789abcdef01234567",
   "runtime": {
@@ -95,7 +95,7 @@ Socket。正式版本从公开 GitHub Release 匿名下载，运行包在激活�
 `cloudssh-sqlite-backward-v1` 数据库回退契约。旧容器不满足契约或版本包含
 不可向后兼容的数据库迁移时，必须改用镜像更新并先完成隔离恢复演练。
 
-客户端当前信任边界是固定的 `moeacgx/cloudssh` 仓库、GitHub HTTPS、
+客户端当前信任边界是固定的 `luoquan0/Cat-Cloudssh` 仓库、GitHub HTTPS、
 不可变 Release 与清单摘要链。正式发版前必须在仓库设置中启用不可变 Release，
 并把仓库变量 `CLOUDSSH_IMMUTABLE_RELEASES` 设为 `true`；流水线发布后会再次读取
 Release 的 `immutable` 状态并校验证明。仓库发布权限失陷仍属于信任边界，不能把
@@ -123,7 +123,7 @@ sh scripts/cloudssh-host-image-update.sh 2.6.0-cloudssh.54
 Docker Socket。
 镜像更新器会先读取当前容器的真实 `/app/data` 与录像 Docker 命名卷，后续备份、重建和回滚都强制复用这两个卷；新容器健康前还会再次核对挂载卷名，不一致时拒绝确认，避免因 `.env`、Compose 目录或默认卷名变化误挂空卷造成“数据丢失”假象。
 日常推送到 `main` 时，`.github/workflows/cloudssh-docker.yml` 会用缓存优先的多架构 Buildx
-直接推送 `ghcr.io/moeacgx/cloudssh` 镜像；正式 Release 仍由 `cloudssh-release.yml`
+直接推送 `ghcr.io/luoquan0/cloudssh` 镜像；正式 Release 仍由 `cloudssh-release.yml`
 保留严格的离线包、校验和不可变 Release 链路。
 
 `auto` 与 `binary` 仍保留为无宿主机权限时的容器内运行包更新。生产机采用本节路径时，
