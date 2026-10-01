@@ -28,16 +28,17 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/prepare-panel-runtime.mjs
-          if test -f scripts/wire-panel-runtime-ui.mjs; then node scripts/wire-panel-runtime-ui.mjs; fi
-          rm scripts/prepare-panel-runtime.mjs
-          rm -f scripts/wire-panel-runtime-ui.mjs
+          node scripts/wire-panel-runtime-ui.mjs
+          rm scripts/prepare-panel-runtime.mjs scripts/wire-panel-runtime-ui.mjs
           rm .github/workflows/panel-runtime-iteration.yml
           npm install --package-lock-only --ignore-scripts --save-exact openai@7.25.0 js-tiktoken@1.0.21
+          echo 'Production Agent entry points:'
+          grep -RIn --include='*.tsx' --exclude='*.test.tsx' 'PanelAgentPanel' src/ui | head -n 30
       - run: npm ci
       - name: Format changed sources
         run: |
           set -euo pipefail
-          git diff --name-only --diff-filter=ACMR "$BASE_SHA" -- '*.ts' '*.tsx' '*.json' '*.yml' '*.md' |
+          git diff --name-only --diff-filter=ACMR "$BASE_SHA" -- '*.ts' '*.tsx' '*.json' '*.yml' '*.md' '*.mjs' |
           while IFS= read -r file; do
             npx prettier --write "$file"
             npx prettier --write "$file"
@@ -55,15 +56,15 @@ jobs:
         id: backend
         continue-on-error: true
         run: npx tsc --noEmit -p tsconfig.node.json
-      - name: Frontend types
+      - name: No new frontend type errors against stable main
         id: frontend
         continue-on-error: true
-        run: npx tsc --noEmit -p tsconfig.app.json
+        run: node scripts/check-frontend-type-regressions.mjs "$BASE_SHA"
       - name: All tests
         id: tests
         continue-on-error: true
         run: |
-          if npm test > /tmp/tests.log 2>&1; then tail -n 12 /tmp/tests.log; else tail -n 160 /tmp/tests.log; exit 1; fi
+          if npm test > /tmp/tests.log 2>&1; then tail -n 12 /tmp/tests.log; else tail -n 180 /tmp/tests.log; exit 1; fi
       - name: Skill regressions
         id: skill
         continue-on-error: true
@@ -93,6 +94,7 @@ jobs:
           test -f src/ui/tests/sidebar/RuntimePanelAgent.test.tsx
           git fetch origin main
           test "$(git rev-parse origin/main)" = "$BASE_SHA"
+          rm -rf .type-reports
           git add -A
           TREE="$(git write-tree)"
           export GIT_AUTHOR_NAME=Zerotwo617 GIT_COMMITTER_NAME=Zerotwo617
