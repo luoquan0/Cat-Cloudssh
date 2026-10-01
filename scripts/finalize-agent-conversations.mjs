@@ -26,6 +26,22 @@ edit("src/ui/sidebar/PanelAgentPanel.tsx", (source) => {
   return source;
 });
 edit("src/ui/sidebar/ServerConversationHistory.tsx", (source) => source.replace("export function readLegacyConversations()", "function readLegacyConversations()"));
+edit("src/ui/tests/sidebar/PanelAgentPanel.test.tsx", (source) => {
+  source = replace(source, 'expect(screen.getByText("desktop ops")).toBeTruthy();', 'expect(await screen.findByText("desktop ops")).toBeTruthy();');
+  const marker = '  it("sends the full live chat history to the backend"';
+  const start = source.indexOf(marker);
+  if (start < 0) throw new Error("Missing full context regression");
+  let tail = source.slice(start);
+  tail = replace(tail, `    localStorage.setItem(
+      "panelAgentLiveConversation",
+      JSON.stringify({ messages: storedMessages }),
+    );`, `    const saved = await conversationApi.create("full-history", "full transcript", []);
+    await conversationApi.append(saved.id, saved.revision, storedMessages.map((message, i) => ({
+      ...message, role: message.role as "user" | "assistant", id: "full-stored-" + i,
+    })), []);`);
+  tail = replace(tail, '    await screen.findByPlaceholderText("panelAgent.chatPlaceholder");', '    await screen.findByPlaceholderText("panelAgent.chatPlaceholder");\n    await screen.findByText("stored-0");');
+  return source.slice(0, start) + tail;
+});
 // Assert the persisted chat timeout separately; existing stateless APIs retain their current budgets.
 fs.appendFileSync("src/ui/tests/api/panel-agent-api.test.ts", String.raw`
 it("allows the bounded summary and model phases for a persisted conversation", async () => {
