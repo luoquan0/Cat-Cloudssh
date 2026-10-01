@@ -94,34 +94,48 @@ export type PanelAgentConversationAction = {
 
 function readStoredSelectedModel(): string {
   if (typeof window === "undefined") return "";
-  return (
-    window.localStorage
-      .getItem(PANEL_AGENT_SELECTED_MODEL_STORAGE_KEY)
-      ?.trim() ?? ""
-  );
+  try {
+    return (
+      window.localStorage
+        .getItem(PANEL_AGENT_SELECTED_MODEL_STORAGE_KEY)
+        ?.trim() ?? ""
+    );
+  } catch {
+    return "";
+  }
 }
 
 function writeStoredSelectedModel(model: string) {
   const value = model.trim();
   if (value) {
-    window.localStorage.setItem(PANEL_AGENT_SELECTED_MODEL_STORAGE_KEY, value);
-  } else {
+    safeSetPanelAgentStorage(PANEL_AGENT_SELECTED_MODEL_STORAGE_KEY, value);
+    return;
+  }
+  try {
     window.localStorage.removeItem(PANEL_AGENT_SELECTED_MODEL_STORAGE_KEY);
+  } catch {
+    // Storage errors must not break the Agent panel.
   }
 }
 
 function readStoredThinkingMode(): PanelAgentReasoningEffort {
   if (typeof window === "undefined") return "auto";
-  const value = window.localStorage.getItem(
-    PANEL_AGENT_THINKING_MODE_STORAGE_KEY,
-  );
-  return PANEL_AGENT_THINKING_MODES.includes(value as PanelAgentReasoningEffort)
-    ? (value as PanelAgentReasoningEffort)
-    : "auto";
+  try {
+    const value = window.localStorage.getItem(
+      PANEL_AGENT_THINKING_MODE_STORAGE_KEY,
+    );
+    return PANEL_AGENT_THINKING_MODES.includes(
+      value as PanelAgentReasoningEffort,
+    )
+      ? (value as PanelAgentReasoningEffort)
+      : "auto";
+  } catch {
+    return "auto";
+  }
 }
 
 function writeStoredThinkingMode(mode: PanelAgentReasoningEffort) {
-  window.localStorage.setItem(PANEL_AGENT_THINKING_MODE_STORAGE_KEY, mode);
+  safeSetPanelAgentStorage(PANEL_AGENT_THINKING_MODE_STORAGE_KEY, mode);
 }
 
 function panelModelForSettings(settings: PanelAgentSettings): string {
@@ -149,7 +163,7 @@ function readStoredModelList(): PanelAgentModel[] {
 }
 
 function writeStoredModelList(models: PanelAgentModel[]) {
-  window.localStorage.setItem(
+  safeSetPanelAgentStorage(
     PANEL_AGENT_MODEL_LIST_STORAGE_KEY,
     JSON.stringify(models.slice(0, 512)),
   );
@@ -206,17 +220,43 @@ function compactToolContentForStorage(content: string): string {
   try {
     const parsed = JSON.parse(content) as Record<string, unknown>;
     if (parsed && typeof parsed === "object") {
-      const recentOutput = parsed.recentOutput;
-      if (typeof recentOutput === "string") {
-        parsed.recentOutput = truncateStoredText(
-          recentOutput,
-          MAX_STORED_TOOL_OUTPUT_CHARS,
+      for (const [key, value] of Object.entries(parsed)) {
+        if (typeof value !== "string") continue;
+        parsed[key] = truncateStoredText(
+          value,
+          key === "recentOutput" ? MAX_STORED_TOOL_OUTPUT_CHARS : 8_000,
         );
       }
-      return truncateStoredText(
-        JSON.stringify(parsed),
-        MAX_STORED_MESSAGE_CONTENT_CHARS,
-      );
+
+      const serialized = JSON.stringify(parsed);
+      if (serialized.length <= MAX_STORED_MESSAGE_CONTENT_CHARS) {
+        return serialized;
+      }
+
+      // Keep a valid JSON tool result even if an unusual payload still exceeds
+      // the per-message recovery budget.
+      return JSON.stringify({
+        ok: parsed.ok,
+        action: parsed.action,
+        targetId: parsed.targetId,
+        hostName: parsed.hostName,
+        command:
+          typeof parsed.command === "string"
+            ? truncateStoredText(parsed.command, 4_000)
+            : undefined,
+        error:
+          typeof parsed.error === "string"
+            ? truncateStoredText(parsed.error, 4_000)
+            : undefined,
+        recentOutput:
+          typeof parsed.recentOutput === "string"
+            ? truncateStoredText(
+                parsed.recentOutput,
+                MAX_STORED_TOOL_OUTPUT_CHARS,
+              )
+            : undefined,
+        storageSnapshotTruncated: true,
+      });
     }
   } catch {
     // Fall back to plain-text compaction for older/non-JSON tool messages.
@@ -400,7 +440,7 @@ function writeStoredLiveConversation(messages: PanelAgentUiMessage[]) {
 
   const compacted = compactMessagesForStorage(
     toApiMessages(messages),
-    MAX_STORED_LIVE_CONVERSATION_CHARS,
+    MAX_STORED_LIVE_CONVERSATION_CHARS - 64,
   );
   const serialized = JSON.stringify({
     updatedAt: Date.now(),
@@ -408,7 +448,10 @@ function writeStoredLiveConversation(messages: PanelAgentUiMessage[]) {
   });
   if (
     serialized.length <= MAX_STORED_LIVE_CONVERSATION_CHARS &&
-    safeSetPanelAgentStorage(PANEL_AGENT_LIVE_CONVERSATION_STORAGE_KEY, serialized)
+    safeSetPanelAgentStorage(
+      PANEL_AGENT_LIVE_CONVERSATION_STORAGE_KEY,
+      serialized,
+    )
   ) {
     return;
   }
