@@ -282,6 +282,14 @@ function readStoredAgentTabs(): StoredAgentTab[] {
   }
 }
 
+function safeSetAppShellStorage(key: string, value: string): void {
+  try {
+    window.safeSetAppShellStorage(key, value);
+  } catch {
+    // UI preferences are best-effort. Storage pressure must never unmount the shell.
+  }
+}
+
 function writeStoredAgentTabs(tabs: Tab[]): void {
   if (typeof window === "undefined") return;
   try {
@@ -417,11 +425,11 @@ function AppShellContent({
   );
 
   useEffect(() => {
-    localStorage.setItem("termix_sidebarWidth", String(sidebarWidth));
+    safeSetAppShellStorage("termix_sidebarWidth", String(sidebarWidth));
   }, [sidebarWidth]);
 
   useEffect(() => {
-    localStorage.setItem("termix_splitMode", splitMode);
+    safeSetAppShellStorage("termix_splitMode", splitMode);
   }, [splitMode]);
 
   useEffect(() => {
@@ -432,7 +440,7 @@ function AppShellContent({
       if (id == null) return null;
       return tabs.find((t) => t.id === id)?.instanceId ?? null;
     });
-    localStorage.setItem("termix_paneInstanceIds", JSON.stringify(instanceIds));
+    safeSetAppShellStorage("termix_paneInstanceIds", JSON.stringify(instanceIds));
   }, [paneTabIds, tabs]);
 
   const isMobile = useIsMobile();
@@ -860,12 +868,12 @@ function AppShellContent({
             };
             for (const key of SNAPSHOT_KEYS)
               snap[key] = localStorage.getItem(key);
-            localStorage.setItem("termix-local-snapshot", JSON.stringify(snap));
+            safeSetAppShellStorage("termix-local-snapshot", JSON.stringify(snap));
           }
           if (prefs.theme) setTheme(prefs.theme as ThemeId);
           if (prefs.fontSize) applyFontSize(prefs.fontSize as FontSizeId);
           if (prefs.accentColor) {
-            localStorage.setItem("termix-accent", prefs.accentColor);
+            safeSetAppShellStorage("termix-accent", prefs.accentColor);
             applyAccentColor(prefs.accentColor);
           }
           if (prefs.language && prefs.language !== i18n.language) {
@@ -875,7 +883,7 @@ function AppShellContent({
             prefs.commandAutocomplete !== null &&
             prefs.commandAutocomplete !== undefined
           )
-            localStorage.setItem(
+            safeSetAppShellStorage(
               "commandAutocomplete",
               String(prefs.commandAutocomplete),
             );
@@ -883,31 +891,31 @@ function AppShellContent({
             prefs.commandPaletteEnabled !== null &&
             prefs.commandPaletteEnabled !== undefined
           )
-            localStorage.setItem(
+            safeSetAppShellStorage(
               "commandPaletteShortcutEnabled",
               String(prefs.commandPaletteEnabled),
             );
           if (prefs.showHostTags !== null && prefs.showHostTags !== undefined) {
-            localStorage.setItem("showHostTags", String(prefs.showHostTags));
+            safeSetAppShellStorage("showHostTags", String(prefs.showHostTags));
             window.dispatchEvent(new CustomEvent("showHostTagsChanged"));
           }
           if (
             prefs.hostTrayOnClick !== null &&
             prefs.hostTrayOnClick !== undefined
           )
-            localStorage.setItem(
+            safeSetAppShellStorage(
               "hostTrayOnClick",
               String(prefs.hostTrayOnClick),
             );
           if (prefs.pinAppRail !== null && prefs.pinAppRail !== undefined) {
-            localStorage.setItem("pinAppRail", String(prefs.pinAppRail));
+            safeSetAppShellStorage("pinAppRail", String(prefs.pinAppRail));
             window.dispatchEvent(new Event("pinAppRailChanged"));
           }
           if (
             prefs.expandAppRailOnHover !== null &&
             prefs.expandAppRailOnHover !== undefined
           ) {
-            localStorage.setItem(
+            safeSetAppShellStorage(
               "expandAppRailOnHover",
               String(prefs.expandAppRailOnHover),
             );
@@ -917,7 +925,7 @@ function AppShellContent({
             prefs.foldersCollapsed !== null &&
             prefs.foldersCollapsed !== undefined
           )
-            localStorage.setItem(
+            safeSetAppShellStorage(
               "defaultSnippetFoldersCollapsed",
               String(prefs.foldersCollapsed),
             );
@@ -925,7 +933,7 @@ function AppShellContent({
             prefs.confirmSnippetExecution !== null &&
             prefs.confirmSnippetExecution !== undefined
           )
-            localStorage.setItem(
+            safeSetAppShellStorage(
               "confirmSnippetExecution",
               String(prefs.confirmSnippetExecution),
             );
@@ -933,7 +941,7 @@ function AppShellContent({
             prefs.disableUpdateCheck !== null &&
             prefs.disableUpdateCheck !== undefined
           )
-            localStorage.setItem(
+            safeSetAppShellStorage(
               "disableUpdateCheck",
               String(prefs.disableUpdateCheck),
             );
@@ -941,7 +949,7 @@ function AppShellContent({
             prefs.confirmTabClose !== null &&
             prefs.confirmTabClose !== undefined
           )
-            localStorage.setItem(
+            safeSetAppShellStorage(
               "confirmTabClose",
               String(prefs.confirmTabClose),
             );
@@ -949,14 +957,14 @@ function AppShellContent({
             prefs.hiddenRailTabs !== null &&
             prefs.hiddenRailTabs !== undefined
           ) {
-            localStorage.setItem("hiddenRailTabs", prefs.hiddenRailTabs);
+            safeSetAppShellStorage("hiddenRailTabs", prefs.hiddenRailTabs);
             window.dispatchEvent(new CustomEvent("hiddenRailTabsChanged"));
           }
           if (
             prefs.terminalDefaultTheme !== null &&
             prefs.terminalDefaultTheme !== undefined
           ) {
-            localStorage.setItem(
+            safeSetAppShellStorage(
               TERMINAL_DEFAULT_THEME_STORAGE_KEY,
               normalizeTerminalDefaultTheme(prefs.terminalDefaultTheme),
             );
