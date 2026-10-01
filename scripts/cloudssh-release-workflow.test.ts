@@ -39,7 +39,7 @@ describe("CloudSSH 正式发版工作流", () => {
     expect(workflow).not.toContain("lukegus");
     expect(workflow).not.toContain("docker.io/");
     expect(workflow).not.toContain("blacksmith");
-    expect(workflow).toContain("github.repository == 'moeacgx/cloudssh'");
+    expect(workflow).toContain("github.repository == 'luoquan0/Cat-Cloudssh'");
     expect(workflow).toContain("github.ref == 'refs/heads/main'");
     expect(workflow).toContain("CLOUDSSH_IMMUTABLE_RELEASES");
     expect(workflow).toContain("--jq '.immutable // false'");
@@ -105,7 +105,7 @@ describe("CloudSSH 正式发版工作流", () => {
     expect(workflow).toContain("contents: read");
     expect(workflow).not.toContain("contents: write");
     expect(workflow).toContain("persist-credentials: false");
-    expect(workflow).toContain("github.repository == 'moeacgx/cloudssh'");
+    expect(workflow).toContain("github.repository == 'luoquan0/Cat-Cloudssh'");
     expect(workflow).toContain("github.ref == 'refs/heads/main'");
     expect(workflow).toContain("manifest.schemaVersion !== 3");
     expect(workflow).toContain(
