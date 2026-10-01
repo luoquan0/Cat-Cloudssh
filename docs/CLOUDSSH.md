@@ -159,7 +159,7 @@ shell。输出游标包含会话 ID、流世代和序号，不能跨会话使用
 子目录，不需要手工克隆仓库：
 
 ```text
-https://github.com/moeacgx/cloudssh/tree/main/skills/cloudssh-agent
+https://github.com/luoquan0/Cat-Cloudssh/tree/main/skills/cloudssh-agent
 ```
 
 安装后重启 Codex。Skill 自带零 npm 依赖的脚本，只要求 Agent 主机具备

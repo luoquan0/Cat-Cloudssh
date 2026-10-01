@@ -12,7 +12,7 @@ import { extractRuntimeArchive } from "./runtime-archive.js";
 import { compareVersions, versionFromReleaseTag } from "./version.js";
 
 const RELEASE_BASE_URL =
-  "https://github.com/moeacgx/cloudssh/releases/download";
+  "https://github.com/luoquan0/Cat-Cloudssh/releases/download";
 const RELEASE_MANIFEST_NAME = "cloudssh-release.json";
 const MANIFEST_NAME = "cloudssh-self-update.json";
 const MANIFEST_SCHEMA_VERSION = 1;
@@ -567,7 +567,7 @@ export async function setUpdateMode(mode: unknown): Promise<UpdateMode> {
 
 function modeBlockedError(): UpdaterClientError {
   return new UpdaterClientError(
-    "当前选择了镜像更新。容器内不能替换自身镜像，请在宿主机拉取公开的 ghcr.io/moeacgx/cloudssh 镜像并重建容器。",
+    "当前选择了镜像更新。容器内不能替换自身镜像，请在宿主机拉取公开的 ghcr.io/luoquan0/cloudssh 镜像并重建容器。",
     "IMAGE_UPDATE_REQUIRES_EXTERNAL_REDEPLOY",
     409,
   );
@@ -782,7 +782,7 @@ function validateReleaseManifest(
     manifest.schemaVersion !== RELEASE_MANIFEST_SCHEMA_VERSION ||
     manifest.channel !== "stable" ||
     manifest.version !== version ||
-    manifest.image !== "ghcr.io/moeacgx/cloudssh" ||
+    manifest.image !== "ghcr.io/luoquan0/cloudssh" ||
     typeof manifest.digest !== "string" ||
     !/^sha256:[0-9a-f]{64}$/.test(manifest.digest) ||
     !/^[0-9a-f]{40,64}$/.test(revision) ||

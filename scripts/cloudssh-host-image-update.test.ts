@@ -44,7 +44,7 @@ describe("CloudSSH 宿主机镜像更新器", () => {
   it("只信任固定仓库的已校验正式 Release 离线镜像", async () => {
     const updater = await readFile(updaterPath, "utf8");
 
-    expect(updater).toContain('REPOSITORY="moeacgx/cloudssh"');
+    expect(updater).toContain('REPOSITORY="luoquan0/Cat-Cloudssh"');
     expect(updater).toContain('TAG="release-$VERSION-tag"');
     expect(updater).toContain(
       'ARCHIVE="cloudssh-image-$VERSION-linux-$ARCH.tar.gz"',
@@ -120,7 +120,7 @@ describe("CloudSSH 宿主机镜像更新器", () => {
           schemaVersion: 3,
           channel: "stable",
           version,
-          image: "ghcr.io/moeacgx/cloudssh",
+          image: "ghcr.io/luoquan0/cloudssh",
           digest: `sha256:${"a".repeat(64)}`,
           revision: "b".repeat(40),
           runtime: {

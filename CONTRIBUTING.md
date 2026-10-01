@@ -17,7 +17,7 @@ Token、数据库、录像或根密钥。
 ## 安装与启动
 
 ```sh
-git clone https://github.com/moeacgx/cloudssh.git
+git clone https://github.com/luoquan0/Cat-Cloudssh.git
 cd cloudssh
 npm ci
 ```
@@ -34,7 +34,7 @@ npm run dev
 
 ## 提交流程
 
-1. 在 [CloudSSH 仓库](https://github.com/moeacgx/cloudssh) 创建 Fork。
+1. 在 [CloudSSH 仓库](https://github.com/luoquan0/Cat-Cloudssh) 创建 Fork。
 2. 从最新 `main` 创建职责单一的分支，例如：
 
    ```sh
@@ -48,7 +48,7 @@ npm run dev
    git commit -m "feat(session): add project session search"
    ```
 
-5. 推送分支并向 `moeacgx/cloudssh:main` 创建 Pull Request。
+5. 推送分支并向 `luoquan0/Cat-Cloudssh:main` 创建 Pull Request。
 
 除非维护者明确要求，不要在普通 PR 中修改版本号、创建发布标签或提交构建产物。
 
@@ -100,7 +100,7 @@ PR 描述应包含：
 ## 问题与安全报告
 
 普通缺陷和功能建议请使用
-[CloudSSH Issues](https://github.com/moeacgx/cloudssh/issues)。安全漏洞不要公开提交
+[CloudSSH Issues](https://github.com/luoquan0/Cat-Cloudssh/issues)。安全漏洞不要公开提交
 Issue，请按 [`SECURITY.md`](SECURITY.md) 使用 GitHub 私有安全公告。
 
 提交贡献即表示你同意相关内容按仓库的 [Apache License 2.0](LICENSE) 发布，并保留

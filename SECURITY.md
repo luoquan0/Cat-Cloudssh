@@ -8,7 +8,7 @@ CloudSSH 当前处于快速迭代阶段，只为最新正式版本提供安全�
 ## 私下报告漏洞
 
 请通过
-[GitHub 私有安全公告](https://github.com/moeacgx/cloudssh/security/advisories/new)
+[GitHub 私有安全公告](https://github.com/luoquan0/Cat-Cloudssh/security/advisories/new)
 报告漏洞，不要创建公开 Issue，也不要在讨论、日志或截图中公开利用细节。
 
 报告中请尽量包含：

@@ -86,7 +86,7 @@ async function listen(options?: {
         body: "release",
         published_at: "2026-08-02T00:00:00.000Z",
         html_url:
-          "https://github.com/moeacgx/cloudssh/releases/tag/release-2.6.0-cloudssh.17-tag",
+          "https://github.com/luoquan0/Cat-Cloudssh/releases/tag/release-2.6.0-cloudssh.17-tag",
         assets: [],
         prerelease: false,
         draft: false,
@@ -101,7 +101,7 @@ async function listen(options?: {
           name: "CloudSSH 17",
           body: "release",
           published_at: "2026-08-02T00:00:00.000Z",
-          html_url: `https://github.com/moeacgx/cloudssh/releases/tag/${tag}`,
+          html_url: `https://github.com/luoquan0/Cat-Cloudssh/releases/tag/${tag}`,
           assets: [],
           prerelease: false,
           draft: false,

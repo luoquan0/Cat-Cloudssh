@@ -595,30 +595,26 @@ describe("CloudSSH 备份恢复契约", () => {
           environment?: Record<string, string>;
         }
       >;
-      volumes: Record<string, { name?: string }>;
     };
 
     expect(compose.services.cloudssh.stop_grace_period).toBe("60s");
     expect(compose.services.guacd.stop_grace_period).toBe("60s");
     expect(compose.services.cloudssh.volumes).toContain(
-      "cloudssh-data:/app/data",
+      "../runtime/cloudssh-data:/app/data",
     );
     expect(compose.services.cloudssh.volumes).toContain(
-      "cloudssh-recordings:/app/data/session_recordings/guacamole",
+      "../runtime/cloudssh-recordings:/app/data/session_recordings/guacamole",
     );
     expect(compose.services.guacd.volumes).toEqual([
-      "cloudssh-recordings:/termix-data/session_recordings/guacamole",
+      "../runtime/cloudssh-recordings:/termix-data/session_recordings/guacamole",
     ]);
     expect(compose.services.guacd.volumes).not.toContain(
-      "cloudssh-data:/termix-data",
+      "../runtime/cloudssh-data:/termix-data",
     );
     expect(compose.services.cloudssh.environment).toMatchObject({
       GUACD_RECORDING_PATH: "/termix-data/session_recordings/guacamole",
       GUACD_RECORDING_BACKEND_PATH: "/app/data/session_recordings/guacamole",
     });
-    expect(compose.volumes["cloudssh-recordings"].name).toBe(
-      "${CLOUDSSH_RECORDINGS_VOLUME:-cloudssh-recordings}",
-    );
   });
 
   it("容器入口让 Node 作为 PID 1 接收优雅停止信号", async () => {

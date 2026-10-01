@@ -1,7 +1,7 @@
 # CloudSSH 强化版
 
-[![Release](https://img.shields.io/github/v/release/moeacgx/cloudssh?display_name=tag&sort=semver)](https://github.com/moeacgx/cloudssh/releases/latest)
-[![License](https://img.shields.io/github/license/moeacgx/cloudssh)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/luoquan0/Cat-Cloudssh?display_name=tag&sort=semver)](https://github.com/luoquan0/Cat-Cloudssh/releases/latest)
+[![License](https://img.shields.io/github/license/luoquan0/Cat-Cloudssh)](LICENSE)
 [![Docker](https://img.shields.io/badge/deploy-Docker-2496ED?logo=docker&logoColor=white)](docker/docker-compose.cloudssh.yml)
 [![Agent Skill](https://img.shields.io/badge/Agent-Ed25519%20Device-111827)](skills/cloudssh-agent/SKILL.md)
 
@@ -105,7 +105,7 @@ Node.js 20 或更高版本，不需要安装 MCP 客户端，也不需要克隆�
 需要 Docker Engine 和 Docker Compose v2。Linux 宿主机首次启动时执行：
 
 ```bash
-git clone https://github.com/moeacgx/cloudssh.git
+git clone https://github.com/luoquan0/Cat-Cloudssh.git
 cd cloudssh
 
 mkdir -p secrets
@@ -141,7 +141,7 @@ docker compose -f docker/docker-compose.cloudssh.yml up -d
 
 详细契约和恢复方式见
 [CloudSSH 在线更新文档](docs/CLOUDSSH-UPDATES.md)。正式版本发布在
-[GitHub Releases](https://github.com/moeacgx/cloudssh/releases)。
+[GitHub Releases](https://github.com/luoquan0/Cat-Cloudssh/releases)。
 
 ## 当前边界
 
@@ -158,7 +158,7 @@ docker compose -f docker/docker-compose.cloudssh.yml up -d
 - [部署、安全边界、备份与恢复](docs/CLOUDSSH.md)
 - [容器内一键更新](docs/CLOUDSSH-UPDATES.md)
 - [Agent Skill 安装与命令](skills/cloudssh-agent/SKILL.md)
-- [最新正式版本](https://github.com/moeacgx/cloudssh/releases/latest)
+- [最新正式版本](https://github.com/luoquan0/Cat-Cloudssh/releases/latest)
 
 ## 开发
 

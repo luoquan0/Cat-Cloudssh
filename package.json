@@ -1,17 +1,17 @@
 {
   "name": "cloudssh-termix",
   "private": true,
-  "version": "2.6.0-cloudssh.54",
+  "version": "2.6.0-cloudssh.55",
   "description": "Private team SSH workspace with persistent sessions and secure agent access.",
   "author": "Karmaa",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/moeacgx/cloudssh.git"
+    "url": "https://github.com/luoquan0/Cat-Cloudssh.git"
   },
-  "homepage": "https://github.com/moeacgx/cloudssh",
+  "homepage": "https://github.com/luoquan0/Cat-Cloudssh",
   "bugs": {
-    "url": "https://github.com/moeacgx/cloudssh/issues"
+    "url": "https://github.com/luoquan0/Cat-Cloudssh/issues"
   },
   "main": "electron/main.cjs",
   "engines": {

@@ -130,7 +130,7 @@ function releaseFetch(
           schemaVersion: 3,
           channel: "stable",
           version: VERSION,
-          image: "ghcr.io/moeacgx/cloudssh",
+          image: "ghcr.io/luoquan0/cloudssh",
           digest: `sha256:${"b".repeat(64)}`,
           revision: "a".repeat(40),
           runtime: {
