@@ -57,13 +57,32 @@ jobs:
         run: npm run type-check
       - id: tests
         continue-on-error: true
-        run: npm test
+        run: |
+          set +e
+          npm test > /tmp/conversation-tests.log 2>&1
+          result=$?
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          lines = re.sub(r'\x1b\[[0-9;]*m', '', Path('/tmp/conversation-tests.log').read_text()).splitlines()
+          for i,line in enumerate(lines):
+              if any(word in line for word in [' FAIL ', 'Test Files', 'Tests  ', 'AssertionError:', 'TestingLibraryElementError:']):
+                  print('\n'.join(lines[i:i+8]))
+          print('\n'.join(lines[-12:]))
+          PY
+          exit "$result"
       - id: skill
         continue-on-error: true
         run: npm run test:skill
       - id: build
         continue-on-error: true
-        run: npm run build
+        run: |
+          if npm run build > /tmp/conversation-build.log 2>&1; then
+            tail -n 14 /tmp/conversation-build.log
+          else
+            tail -n 100 /tmp/conversation-build.log
+            exit 1
+          fi
       - name: Require every validation gate
         env:
           LINT: ${{ steps.lint.outcome }}
