@@ -32,7 +32,8 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/prepare-conversation-tests.mjs
-          rm scripts/apply-agent-conversations.mjs scripts/prepare-conversation-tests.mjs
+          node scripts/refine-agent-conversations.mjs
+          rm scripts/apply-agent-conversations.mjs scripts/prepare-conversation-tests.mjs scripts/refine-agent-conversations.mjs
           rm .github/workflows/agent-conversation-iteration.yml
       - run: npm ci
       - name: Format changed source files
