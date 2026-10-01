@@ -3,17 +3,17 @@
   <metadata>
     <id>termix-ssh</id>
     <version>VERSION_PLACEHOLDER</version>
-    <packageSourceUrl>https://github.com/moeacgx/cloudssh</packageSourceUrl>
+    <packageSourceUrl>https://github.com/luoquan0/Cat-Cloudssh</packageSourceUrl>
     <owners>bugattiguy527</owners>
     <title>Termix SSH</title>
     <authors>bugattiguy527</authors>
-    <projectUrl>https://github.com/moeacgx/cloudssh</projectUrl>
-    <iconUrl>https://raw.githubusercontent.com/moeacgx/cloudssh/main/public/icon.png</iconUrl>
-    <licenseUrl>https://raw.githubusercontent.com/moeacgx/cloudssh/main/LICENSE</licenseUrl>
+    <projectUrl>https://github.com/luoquan0/Cat-Cloudssh</projectUrl>
+    <iconUrl>https://raw.githubusercontent.com/luoquan0/Cat-Cloudssh/main/public/icon.png</iconUrl>
+    <licenseUrl>https://raw.githubusercontent.com/luoquan0/Cat-Cloudssh/main/LICENSE</licenseUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <projectSourceUrl>https://github.com/moeacgx/cloudssh</projectSourceUrl>
-    <docsUrl>https://github.com/moeacgx/cloudssh#readme</docsUrl>
-    <bugTrackerUrl>https://github.com/moeacgx/cloudssh/issues</bugTrackerUrl>
+    <projectSourceUrl>https://github.com/luoquan0/Cat-Cloudssh</projectSourceUrl>
+    <docsUrl>https://github.com/luoquan0/Cat-Cloudssh#readme</docsUrl>
+    <bugTrackerUrl>https://github.com/luoquan0/Cat-Cloudssh/issues</bugTrackerUrl>
     <tags>docker ssh terminal telnet self-hosted rdp file-management vnc ssh-tunnel server-stats termix</tags>
     <summary>Self-hosted SSH and remote desktop management.</summary>
     <description>
@@ -21,7 +21,7 @@ Termix is an open-source, forever-free, self-hosted all-in-one server management
 
 This package installs the desktop application version of Termix.
     </description>
-    <releaseNotes>https://github.com/moeacgx/cloudssh/releases</releaseNotes>
+    <releaseNotes>https://github.com/luoquan0/Cat-Cloudssh/releases</releaseNotes>
   </metadata>
   <files>
     <file src="tools\**" target="tools" />
