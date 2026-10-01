@@ -79,6 +79,8 @@ const MAX_STORED_MESSAGES_PER_CONVERSATION = 120;
 const MAX_STORED_MESSAGE_CONTENT_CHARS = 24_000;
 const MAX_STORED_TOOL_OUTPUT_CHARS = 12_000;
 const MAX_STORED_TEXT_ATTACHMENT_CHARS = 8_000;
+const MAX_CHAT_REQUEST_HISTORY_CHARS = 240_000;
+const MAX_CHAT_REQUEST_MESSAGES = 160;
 
 const PANEL_AGENT_THINKING_MODES: PanelAgentReasoningEffort[] = [
   "auto",
@@ -309,6 +311,68 @@ function compactMessagesForStorage(
     compacted = compacted.slice(1);
   }
   return compacted;
+}
+
+function toBoundedRequestMessages(
+  messages: PanelAgentUiMessage[],
+): PanelAgentChatMessage[] {
+  const apiMessages = toApiMessages(messages);
+  if (
+    apiMessages.length <= MAX_CHAT_REQUEST_MESSAGES &&
+    JSON.stringify(apiMessages).length <= MAX_CHAT_REQUEST_HISTORY_CHARS
+  ) {
+    return apiMessages;
+  }
+
+  let latestUserIndex = -1;
+  for (let index = apiMessages.length - 1; index >= 0; index -= 1) {
+    if (apiMessages[index].role === "user") {
+      latestUserIndex = index;
+      break;
+    }
+  }
+
+  if (latestUserIndex < 0) {
+    let tail = apiMessages
+      .map(compactMessageForStorage)
+      .slice(-MAX_CHAT_REQUEST_MESSAGES);
+    while (
+      tail.length > 1 &&
+      JSON.stringify(tail).length > MAX_CHAT_REQUEST_HISTORY_CHARS
+    ) {
+      tail = tail.slice(1);
+    }
+    return tail;
+  }
+
+  // Preserve the current user turn at full fidelity (including newly attached
+  // images). Older turns can use the same compact representation as recovery
+  // storage so long-running chats do not grow the provider request forever.
+  let selected = apiMessages.slice(latestUserIndex);
+  const history = apiMessages
+    .slice(0, latestUserIndex)
+    .map(compactMessageForStorage);
+  let cursor = history.length;
+
+  while (cursor > 0) {
+    let turnStart = cursor - 1;
+    while (turnStart > 0 && history[turnStart].role !== "user") {
+      turnStart -= 1;
+    }
+    if (history[turnStart].role !== "user") break;
+
+    const candidate = [...history.slice(turnStart, cursor), ...selected];
+    if (
+      candidate.length > MAX_CHAT_REQUEST_MESSAGES ||
+      JSON.stringify(candidate).length > MAX_CHAT_REQUEST_HISTORY_CHARS
+    ) {
+      break;
+    }
+    selected = candidate;
+    cursor = turnStart;
+  }
+
+  return selected;
 }
 
 function compactConversationHistoryForStorage(
@@ -911,7 +975,7 @@ export function PanelAgentPanel({
       signal.throwIfAborted();
       const response = await sendPanelAgentChat(
         {
-          messages: toApiMessages(history),
+          messages: toBoundedRequestMessages(history),
           skillIds: [...selectedSkillIds],
           targets: selectedTargets(),
           model: selectedModel.trim() || undefined,
