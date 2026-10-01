@@ -15,7 +15,7 @@ jobs:
     env:
       NODE_OPTIONS: --max-old-space-size=4096
       BASE_SHA: 350cc9e3b70295c0342080787e5a21ce984d3dd9
-      PUBLISH_TESTED: "false"
+      PUBLISH_TESTED: "true"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -29,7 +29,8 @@ jobs:
           set -euo pipefail
           node scripts/prepare-panel-runtime.mjs
           node scripts/wire-panel-runtime-ui.mjs
-          rm scripts/prepare-panel-runtime.mjs scripts/wire-panel-runtime-ui.mjs
+          node scripts/finalize-panel-runtime.mjs
+          rm scripts/prepare-panel-runtime.mjs scripts/wire-panel-runtime-ui.mjs scripts/finalize-panel-runtime.mjs
           rm .github/workflows/panel-runtime-iteration.yml
           npm install --package-lock-only --ignore-scripts --save-exact openai@7.25.0 js-tiktoken@1.0.21
           echo 'Production Agent entry points:'
