@@ -16,7 +16,7 @@ afterEach(async () => {
 
 const valid = {
   version: "2.6.0-cloudssh.29",
-  image: "ghcr.io/moeacgx/cloudssh",
+  image: "ghcr.io/luoquan0/cloudssh",
   digest: `sha256:${"a".repeat(64)}`,
   revision: "b".repeat(40),
   runtimeManifest: "cloudssh-self-update.json",
