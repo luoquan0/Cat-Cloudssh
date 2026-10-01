@@ -849,6 +849,40 @@ describe("PanelAgentPanel", () => {
     expect(requestSignal?.aborted).toBe(true);
   });
 
+  it("bounds oversized historical context while preserving the newest user turn", async () => {
+    const storedMessages = Array.from({ length: 20 }, (_, index) => ({
+      role: index % 2 === 0 ? "user" : "assistant",
+      content: `stored-${index}-${"x".repeat(15_000)}`,
+    }));
+    localStorage.setItem(
+      "panelAgentLiveConversation",
+      JSON.stringify({ messages: storedMessages }),
+    );
+    panelAgentApi.sendPanelAgentChat.mockResolvedValueOnce({
+      message: { role: "assistant", content: "bounded", toolCalls: [] },
+    });
+
+    render(<PanelAgentPanel terminalTabs={[]} activeTabId="" />);
+    await screen.findByPlaceholderText("panelAgent.chatPlaceholder");
+
+    fireEvent.change(
+      screen.getByPlaceholderText("panelAgent.chatPlaceholder"),
+      { target: { value: "latest request" } },
+    );
+    fireEvent.click(screen.getByText("panelAgent.send"));
+    await screen.findByText("bounded");
+
+    const payload = panelAgentApi.sendPanelAgentChat.mock.calls[0][0];
+    expect(JSON.stringify(payload.messages).length).toBeLessThanOrEqual(
+      240_000,
+    );
+    expect(payload.messages.length).toBeLessThan(21);
+    expect(payload.messages.at(-1)).toEqual({
+      role: "user",
+      content: "latest request",
+    });
+  });
+
   it("sends the full live chat history to the backend", async () => {
     const storedMessages = Array.from({ length: 25 }, (_, index) => ({
       role: index % 2 === 0 ? "user" : "assistant",
