@@ -42,14 +42,40 @@ jobs:
           git diff --name-only --diff-filter=ACMR "$BASE_SHA" -- '*.ts' '*.tsx' '*.json' '*.md' '*.yml' |
           while IFS= read -r file; do
             npx prettier --write "$file"
+            npx prettier --write "$file"
           done
           git diff --check
-      - run: npm run lint
-      - run: npm run format:check
-      - run: npm run type-check
-      - run: npm test
-      - run: npm run test:skill
-      - run: npm run build
+      - id: lint
+        continue-on-error: true
+        run: npm run lint
+      - id: format
+        continue-on-error: true
+        run: npm run format:check
+      - id: types
+        continue-on-error: true
+        run: npm run type-check
+      - id: tests
+        continue-on-error: true
+        run: npm test
+      - id: skill
+        continue-on-error: true
+        run: npm run test:skill
+      - id: build
+        continue-on-error: true
+        run: npm run build
+      - name: Require every validation gate
+        env:
+          LINT: ${{ steps.lint.outcome }}
+          FORMAT: ${{ steps.format.outcome }}
+          TYPES: ${{ steps.types.outcome }}
+          TESTS: ${{ steps.tests.outcome }}
+          SKILL: ${{ steps.skill.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+        run: |
+          set -euo pipefail
+          for result in "$LINT" "$FORMAT" "$TYPES" "$TESTS" "$SKILL" "$BUILD"; do
+            test "$result" = success
+          done
       - name: Publish only the tested source tree to the iteration branch
         run: |
           set -euo pipefail
