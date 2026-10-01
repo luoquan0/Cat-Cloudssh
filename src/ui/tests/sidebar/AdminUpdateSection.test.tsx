@@ -36,7 +36,7 @@ const idleStatus = {
   latestVersion: "2.6.0-cloudssh.17",
   status: "update_available" as const,
   releaseUrl:
-    "https://github.com/moeacgx/cloudssh/releases/tag/v2.6.0-cloudssh.17",
+    "https://github.com/luoquan0/Cat-Cloudssh/releases/tag/v2.6.0-cloudssh.17",
   releaseName: "CloudSSH 2.6.0-cloudssh.17",
   publishedAt: "2026-08-02T00:00:00.000Z",
   updater: {
