@@ -1,0 +1,47 @@
+name: Agent runtime checks
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - src/backend/panel-runtime/**
+      - src/backend/database/routes/panel-agent*
+      - src/ui/sidebar/**
+      - src/ui/workspace/WorkspaceUtilityRail.tsx
+      - src/ui/api/panel-*.ts
+      - src/ui/tests/sidebar/**
+      - src/types/panel-runtime.ts
+      - scripts/check-frontend-type-regressions.mjs
+      - package*.json
+      - .github/workflows/panel-runtime-check.yml
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: agent-runtime-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
+      TYPE_BASELINE: 350cc9e3b70295c0342080787e5a21ce984d3dd9
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - name: Backend type check
+        run: npx tsc --noEmit -p tsconfig.node.json
+      - name: Frontend diagnostic regression check
+        run: node scripts/check-frontend-type-regressions.mjs "$TYPE_BASELINE"
+      - run: npm test
+      - run: npm run test:skill
+      - run: npm run build
