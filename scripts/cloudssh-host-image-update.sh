@@ -4,7 +4,7 @@ umask 077
 
 # Fast, host-side CloudSSH production updater. It deliberately runs outside the
 # application container, so the panel never receives Docker daemon access.
-REPOSITORY="moeacgx/cloudssh"
+REPOSITORY="luoquan0/Cat-Cloudssh"
 INSTALL_DIR="${CLOUDSSH_INSTALL_DIR:-/opt/cloudssh}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker/docker-compose.cloudssh.yml}"
 ENV_FILE="${CLOUDSSH_ENV_FILE:-docker/.env}"
@@ -66,7 +66,7 @@ validate_release_manifest() {
   [ "$schema_version" = 3 ] || fail "Release 清单 schemaVersion 无效"
   [ "$(manifest_field channel "$manifest")" = stable ] || fail "Release 清单渠道不受信任"
   [ "$(manifest_field version "$manifest")" = "$expected_version" ] || fail "Release 清单版本不匹配"
-  [ "$(manifest_field image "$manifest")" = ghcr.io/moeacgx/cloudssh ] || fail "Release 清单镜像仓库不受信任"
+  [ "$(manifest_field image "$manifest")" = ghcr.io/luoquan0/cloudssh ] || fail "Release 清单镜像仓库不受信任"
   digest="$(manifest_field digest "$manifest")"
   digest_suffix="${digest#sha256:}"
   [ "$digest" != "$digest_suffix" ] || fail "Release 清单镜像摘要无效"
