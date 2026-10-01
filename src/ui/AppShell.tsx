@@ -284,7 +284,7 @@ function readStoredAgentTabs(): StoredAgentTab[] {
 
 function safeSetAppShellStorage(key: string, value: string): void {
   try {
-    window.safeSetAppShellStorage(key, value);
+    window.localStorage.setItem(key, value);
   } catch {
     // UI preferences are best-effort. Storage pressure must never unmount the shell.
   }
