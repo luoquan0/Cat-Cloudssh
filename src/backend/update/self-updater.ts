@@ -782,7 +782,7 @@ function validateReleaseManifest(
     manifest.schemaVersion !== RELEASE_MANIFEST_SCHEMA_VERSION ||
     manifest.channel !== "stable" ||
     manifest.version !== version ||
-    manifest.image !== "ghcr.io/moeacgx/cloudssh" ||
+    manifest.image !== "ghcr.io/luoquan0/cloudssh" ||
     typeof manifest.digest !== "string" ||
     !/^sha256:[0-9a-f]{64}$/.test(manifest.digest) ||
     !/^[0-9a-f]{40,64}$/.test(revision) ||
