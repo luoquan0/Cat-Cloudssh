@@ -243,6 +243,77 @@ type PendingTabClose = {
   confirmLabel: string;
 };
 
+const AGENT_TAB_SESSION_STORAGE_KEY = "termix.agentTabs.v1";
+const MAX_SESSION_STORED_AGENT_TABS = 16;
+
+type StoredAgentTab = {
+  agentSessionId: string;
+  instanceId: string;
+  hostId: string;
+  label: string;
+  openedAt: number;
+};
+
+function readStoredAgentTabs(): StoredAgentTab[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.sessionStorage.getItem(AGENT_TAB_SESSION_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item): item is StoredAgentTab => {
+        if (!item || typeof item !== "object") return false;
+        const candidate = item as Partial<StoredAgentTab>;
+        return (
+          typeof candidate.agentSessionId === "string" &&
+          candidate.agentSessionId.length > 0 &&
+          typeof candidate.instanceId === "string" &&
+          candidate.instanceId.length > 0 &&
+          typeof candidate.hostId === "string" &&
+          candidate.hostId.length > 0 &&
+          typeof candidate.label === "string" &&
+          typeof candidate.openedAt === "number"
+        );
+      })
+      .slice(0, MAX_SESSION_STORED_AGENT_TABS);
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredAgentTabs(tabs: Tab[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    const records: StoredAgentTab[] = tabs
+      .filter(
+        (tab) =>
+          tab.type === "terminal" &&
+          Boolean(tab.agentSessionId) &&
+          Boolean(tab.host?.id),
+      )
+      .slice(0, MAX_SESSION_STORED_AGENT_TABS)
+      .map((tab) => ({
+        agentSessionId: tab.agentSessionId!,
+        instanceId: tab.instanceId,
+        hostId: String(tab.host!.id),
+        label: tab.label,
+        openedAt: tab.openedAt,
+      }));
+
+    if (records.length === 0) {
+      window.sessionStorage.removeItem(AGENT_TAB_SESSION_STORAGE_KEY);
+      return;
+    }
+    window.sessionStorage.setItem(
+      AGENT_TAB_SESSION_STORAGE_KEY,
+      JSON.stringify(records),
+    );
+  } catch {
+    // Recovery metadata is best-effort and must never destabilize AppShell.
+  }
+}
+
 // ─── AppShell ────────────────────────────────────────────────────────────────
 
 function AppShellContent({
@@ -1113,12 +1184,12 @@ function AppShellContent({
 
     async function loadSavedTabs() {
       try {
-        const [savedTabs, activeSessions] = await Promise.all([
+        const [savedTabsResult, activeSessions] = await Promise.all([
           getOpenTabs(),
           getActiveSessions(),
         ]);
-
-        if (!Array.isArray(savedTabs) || savedTabs.length === 0) return;
+        const savedTabs = Array.isArray(savedTabsResult) ? savedTabsResult : [];
+        const storedAgentTabs = readStoredAgentTabs();
 
         const sessionByInstanceId =
           createActiveSessionByTabInstance(activeSessions);
@@ -1200,6 +1271,46 @@ function AppShellContent({
           });
         }
 
+        const activeAgentById = new Map(
+          activeSessions
+            .filter(
+              (session) =>
+                session.sessionSource === "agent" &&
+                typeof session.agentSessionId === "string" &&
+                session.agentSessionId.length > 0 &&
+                session.isConnected,
+            )
+            .map((session) => [session.agentSessionId!, session]),
+        );
+
+        for (const [index, stored] of storedAgentTabs.entries()) {
+          const liveAgent = activeAgentById.get(stored.agentSessionId);
+          if (!liveAgent) continue;
+
+          const host = allHosts.find(
+            (candidate) =>
+              candidate.id === String(liveAgent.hostId) ||
+              candidate.id === stored.hostId,
+          );
+          if (!host?.enableSsh) continue;
+
+          restoredTabs.push({
+            id: `${host.name}-terminal-agent-${Date.now()}-${index}`,
+            instanceId: stored.instanceId,
+            type: "terminal",
+            label: stored.label || `${liveAgent.hostName} · Agent`,
+            host,
+            openedAt: stored.openedAt || Date.now(),
+            restoredSessionId: null,
+            sessionPinned: false,
+            sessionManagedTmux: false,
+            persistentSessionId: null,
+            persistentTmuxSessionName: null,
+            agentSessionId: stored.agentSessionId,
+            terminalRef: createRef(),
+          });
+        }
+
         setBackgroundTabRecords(backgroundRecords);
         if (restoredTabs.length > 0) {
           setTabs((prev) => {
@@ -1249,6 +1360,14 @@ function AppShellContent({
       // silently fail
     }
   }, [tabsReady, tabs]);
+
+  // Agent terminal tabs intentionally stay out of user_open_tabs, but losing all
+  // in-memory UI state (reload/error-boundary remount) must not orphan a still-running
+  // Agent session. Keep only tiny, non-secret attachment metadata for this browser tab.
+  useEffect(() => {
+    if (!tabsReady) return;
+    writeStoredAgentTabs(tabs);
+  }, [tabs, tabsReady]);
 
   // Debounced tab-order sync: when tab order changes, patch each persistent tab's tabOrder in DB.
   const orderSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
