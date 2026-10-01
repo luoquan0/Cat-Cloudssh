@@ -18,10 +18,20 @@ edit("src/backend/panel-runtime/jobs.ts", source => {
   return source;
 });
 edit("src/backend/panel-runtime/policy.ts", source => replace(source, 'jobId: call.name === "run_command" ? undefined : call.arguments.jobId,', 'jobId: call.name === "cancel_job" ? call.arguments.jobId : undefined,'));
-edit("src/backend/panel-runtime/model.ts", source => source.replace(',parallel_tool_calls:false', ''));
+edit("src/backend/panel-runtime/model.ts", source => {
+  source = source.replace(',parallel_tool_calls:false', '');
+  return replace(source, '{role:"user",content:"Current user task (retained through compaction):\\n"+task.content}', 'toModelMessage({...task,content:"Current user task (retained through compaction):\\n"+task.content})');
+});
 edit("src/ui/sidebar/PanelRuntimeBridge.ts", source => replace(source, '  working: boolean;', '  working: boolean;\n  blocked?: boolean;'));
 edit("src/ui/sidebar/PanelAgentPanel.tsx", source => replace(source, '  const sendDisabled = adminConfigMissing || modelMissing || !settings;', '  const sendDisabled = adminConfigMissing || modelMissing || !settings || Boolean(runtimeBridge?.blocked);'));
 edit("src/ui/sidebar/RuntimePanelAgent.tsx", source => replace(source, 'messages, setMessages, working: busy || !initialized || active, initialTargetIds:', 'messages, setMessages, working: busy || !initialized || active, blocked: Boolean(pending.current), initialTargetIds:'));
-edit("src/ui/tests/sidebar/RuntimePanelAgent.test.tsx", source => replace(source, ' } } };\n}\nasync function ready()', ' } } } as unknown as Tab;\n}\nasync function ready()'));
 edit("docs/PANEL-AGENT-RUNTIME.md", source => replace(source, '| `PANEL_AGENT_OUTPUT_DIR` |', '| `PANEL_AGENT_CONCURRENT_JOBS` | 8 | Concurrent independent SSH channels |\n| `PANEL_AGENT_JOB_LOG_BYTES` | 536870912 | Per-job physical log safeguard |\n| `PANEL_AGENT_LOG_BYTES` | 4294967296 | Global physical log safeguard |\n| `PANEL_AGENT_OUTPUT_DIR` |'));
+edit("src/backend/panel-runtime/model.test.ts", source => replace(source, 'ContextOverflowError, OpenAIRuntimeModel,', 'basePrompt, ContextOverflowError, OpenAIRuntimeModel,'));
+fs.appendFileSync("src/backend/panel-runtime/model.test.ts", `
+it("retains the current user's image and text attachment through compaction", () => {
+  const messages = basePrompt(config, run, { id: "current-task", role: "user", content: "inspect this", attachments: [{ id: "image", kind: "image", name: "diagram.png", mimeType: "image/png", size: 3, dataUrl: "data:image/png;base64,YWJj" }, { id: "text", kind: "text", name: "notes.txt", mimeType: "text/plain", size: 5, text: "important instruction" }] }, []);
+  expect(JSON.stringify(messages)).toContain("data:image/png;base64,YWJj");
+  expect(JSON.stringify(messages)).toContain("important instruction");
+});
+`);
 console.log("Runtime safety boundaries and compact UI integration finalized.");
