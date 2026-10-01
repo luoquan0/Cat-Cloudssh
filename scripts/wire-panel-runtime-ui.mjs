@@ -48,7 +48,5 @@ edit("src/ui/workspace/WorkspaceUtilityRail.tsx", source => replace(source, `imp
 } from "@/sidebar/PanelAgentPanel";`, `import { RuntimePanelAgent as PanelAgentPanel } from "@/sidebar/RuntimePanelAgent";
 import type { PanelAgentConversationAction } from "@/sidebar/PanelAgentPanel";`));
 edit("src/ui/tests/workspace/WorkspaceUtilityRail.test.tsx", source => source.replace('vi.mock("@/sidebar/PanelAgentPanel",', 'vi.mock("@/sidebar/RuntimePanelAgent",').replace('  PanelAgentPanel: ({', '  RuntimePanelAgent: ({'));
-edit("src/backend/panel-runtime/policy.ts", source => source.replaceAll('\\[', '[').replaceAll('\\"', '"'));
-// Preserve working backend tasks when chat components unmount. Other production
-// chat entry points must use the same wrapper, not a second browser-side loop.
+edit("src/backend/panel-runtime/policy.ts", source => source.split("\n").map(line => line.includes("if (!command ||") ? line.replace('\\[', '[').replace('\\"', '"') : line).join("\n"));
 console.log("Existing Agent UI now delegates execution to the backend runtime.");
