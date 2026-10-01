@@ -23,7 +23,7 @@ env:
 jobs:
   verify:
     name: 发布前检查
-    if: ${{ github.repository == 'moeacgx/cloudssh' && github.ref == 'refs/heads/main' }}
+    if: ${{ github.repository == 'luoquan0/Cat-Cloudssh' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
