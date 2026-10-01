@@ -1,4 +1,4 @@
-export const CLOUDSSH_REPOSITORY = "https://github.com/moeacgx/cloudssh";
+export const CLOUDSSH_REPOSITORY = "https://github.com/luoquan0/Cat-Cloudssh";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
