@@ -1675,7 +1675,7 @@ export function DashboardTab({
                 asChild
               >
                 <a
-                  href="https://github.com/moeacgx/cloudssh"
+                  href="https://github.com/luoquan0/Cat-Cloudssh"
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -1817,7 +1817,7 @@ export function DashboardTab({
             asChild
           >
             <a
-              href="https://github.com/moeacgx/cloudssh"
+              href="https://github.com/luoquan0/Cat-Cloudssh"
               target="_blank"
               rel="noreferrer"
             >
