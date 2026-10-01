@@ -70,6 +70,17 @@ const MAX_CHAT_ATTACHMENTS = 6;
 const MAX_TEXT_ATTACHMENT_CHARS = 80_000;
 const MAX_IMAGE_ATTACHMENT_BYTES = 4 * 1024 * 1024;
 const MAX_STORED_CONVERSATIONS = 12;
+// Keep Agent chat persistence comfortably below typical localStorage quotas so
+// it cannot starve unrelated shell preferences/tabs. The mounted React state
+// remains full fidelity; only the reload/recovery snapshot is compacted.
+const MAX_STORED_LIVE_CONVERSATION_CHARS = 320_000;
+const MAX_STORED_CONVERSATION_HISTORY_CHARS = 640_000;
+const MAX_STORED_MESSAGES_PER_CONVERSATION = 120;
+const MAX_STORED_MESSAGE_CONTENT_CHARS = 24_000;
+const MAX_STORED_TOOL_OUTPUT_CHARS = 12_000;
+const MAX_STORED_TEXT_ATTACHMENT_CHARS = 8_000;
+const MAX_CHAT_REQUEST_HISTORY_CHARS = 240_000;
+const MAX_CHAT_REQUEST_MESSAGES = 160;
 
 const PANEL_AGENT_THINKING_MODES: PanelAgentReasoningEffort[] = [
   "auto",
@@ -85,34 +96,48 @@ export type PanelAgentConversationAction = {
 
 function readStoredSelectedModel(): string {
   if (typeof window === "undefined") return "";
-  return (
-    window.localStorage
-      .getItem(PANEL_AGENT_SELECTED_MODEL_STORAGE_KEY)
-      ?.trim() ?? ""
-  );
+  try {
+    return (
+      window.localStorage
+        .getItem(PANEL_AGENT_SELECTED_MODEL_STORAGE_KEY)
+        ?.trim() ?? ""
+    );
+  } catch {
+    return "";
+  }
 }
 
 function writeStoredSelectedModel(model: string) {
   const value = model.trim();
   if (value) {
-    window.localStorage.setItem(PANEL_AGENT_SELECTED_MODEL_STORAGE_KEY, value);
-  } else {
+    safeSetPanelAgentStorage(PANEL_AGENT_SELECTED_MODEL_STORAGE_KEY, value);
+    return;
+  }
+  try {
     window.localStorage.removeItem(PANEL_AGENT_SELECTED_MODEL_STORAGE_KEY);
+  } catch {
+    // Storage errors must not break the Agent panel.
   }
 }
 
 function readStoredThinkingMode(): PanelAgentReasoningEffort {
   if (typeof window === "undefined") return "auto";
-  const value = window.localStorage.getItem(
-    PANEL_AGENT_THINKING_MODE_STORAGE_KEY,
-  );
-  return PANEL_AGENT_THINKING_MODES.includes(value as PanelAgentReasoningEffort)
-    ? (value as PanelAgentReasoningEffort)
-    : "auto";
+  try {
+    const value = window.localStorage.getItem(
+      PANEL_AGENT_THINKING_MODE_STORAGE_KEY,
+    );
+    return PANEL_AGENT_THINKING_MODES.includes(
+      value as PanelAgentReasoningEffort,
+    )
+      ? (value as PanelAgentReasoningEffort)
+      : "auto";
+  } catch {
+    return "auto";
+  }
 }
 
 function writeStoredThinkingMode(mode: PanelAgentReasoningEffort) {
-  window.localStorage.setItem(PANEL_AGENT_THINKING_MODE_STORAGE_KEY, mode);
+  safeSetPanelAgentStorage(PANEL_AGENT_THINKING_MODE_STORAGE_KEY, mode);
 }
 
 function panelModelForSettings(settings: PanelAgentSettings): string {
@@ -140,7 +165,7 @@ function readStoredModelList(): PanelAgentModel[] {
 }
 
 function writeStoredModelList(models: PanelAgentModel[]) {
-  window.localStorage.setItem(
+  safeSetPanelAgentStorage(
     PANEL_AGENT_MODEL_LIST_STORAGE_KEY,
     JSON.stringify(models.slice(0, 512)),
   );
@@ -187,6 +212,190 @@ function toUiMessages(
   return messages.map((message) => ({ ...message, id: createMessageId() }));
 }
 
+function truncateStoredText(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value;
+  const suffix = value.slice(-(maxChars - 32));
+  return `[...storage snapshot truncated...]\n${suffix}`;
+}
+
+function compactToolContentForStorage(content: string): string {
+  try {
+    const parsed = JSON.parse(content) as Record<string, unknown>;
+    if (parsed && typeof parsed === "object") {
+      for (const [key, value] of Object.entries(parsed)) {
+        if (typeof value !== "string") continue;
+        parsed[key] = truncateStoredText(
+          value,
+          key === "recentOutput" ? MAX_STORED_TOOL_OUTPUT_CHARS : 8_000,
+        );
+      }
+
+      const serialized = JSON.stringify(parsed);
+      if (serialized.length <= MAX_STORED_MESSAGE_CONTENT_CHARS) {
+        return serialized;
+      }
+
+      // Keep a valid JSON tool result even if an unusual payload still exceeds
+      // the per-message recovery budget.
+      return JSON.stringify({
+        ok: parsed.ok,
+        action: parsed.action,
+        targetId: parsed.targetId,
+        hostName: parsed.hostName,
+        command:
+          typeof parsed.command === "string"
+            ? truncateStoredText(parsed.command, 4_000)
+            : undefined,
+        error:
+          typeof parsed.error === "string"
+            ? truncateStoredText(parsed.error, 4_000)
+            : undefined,
+        recentOutput:
+          typeof parsed.recentOutput === "string"
+            ? truncateStoredText(
+                parsed.recentOutput,
+                MAX_STORED_TOOL_OUTPUT_CHARS,
+              )
+            : undefined,
+        storageSnapshotTruncated: true,
+      });
+    }
+  } catch {
+    // Fall back to plain-text compaction for older/non-JSON tool messages.
+  }
+  return truncateStoredText(content, MAX_STORED_MESSAGE_CONTENT_CHARS);
+}
+
+function compactMessageForStorage(
+  message: PanelAgentChatMessage,
+): PanelAgentChatMessage {
+  const attachments = message.attachments?.map((attachment) => ({
+    ...attachment,
+    // Data URLs can be several megabytes each. They are only needed for the
+    // live model request, not for a reload/history preview.
+    dataUrl: undefined,
+    text:
+      typeof attachment.text === "string"
+        ? truncateStoredText(attachment.text, MAX_STORED_TEXT_ATTACHMENT_CHARS)
+        : undefined,
+  }));
+
+  return {
+    ...message,
+    content:
+      message.role === "tool"
+        ? compactToolContentForStorage(message.content)
+        : truncateStoredText(message.content, MAX_STORED_MESSAGE_CONTENT_CHARS),
+    attachments,
+  };
+}
+
+function compactMessagesForStorage(
+  messages: PanelAgentChatMessage[],
+  maxChars: number,
+): PanelAgentChatMessage[] {
+  let compacted = messages
+    .map(compactMessageForStorage)
+    .slice(-MAX_STORED_MESSAGES_PER_CONVERSATION);
+
+  while (compacted.length > 1 && JSON.stringify(compacted).length > maxChars) {
+    compacted = compacted.slice(1);
+  }
+  return compacted;
+}
+
+function toBoundedRequestMessages(
+  messages: PanelAgentUiMessage[],
+): PanelAgentChatMessage[] {
+  const apiMessages = toApiMessages(messages);
+  if (
+    apiMessages.length <= MAX_CHAT_REQUEST_MESSAGES &&
+    JSON.stringify(apiMessages).length <= MAX_CHAT_REQUEST_HISTORY_CHARS
+  ) {
+    return apiMessages;
+  }
+
+  let latestUserIndex = -1;
+  for (let index = apiMessages.length - 1; index >= 0; index -= 1) {
+    if (apiMessages[index].role === "user") {
+      latestUserIndex = index;
+      break;
+    }
+  }
+
+  if (latestUserIndex < 0) {
+    let tail = apiMessages
+      .map(compactMessageForStorage)
+      .slice(-MAX_CHAT_REQUEST_MESSAGES);
+    while (
+      tail.length > 1 &&
+      JSON.stringify(tail).length > MAX_CHAT_REQUEST_HISTORY_CHARS
+    ) {
+      tail = tail.slice(1);
+    }
+    return tail;
+  }
+
+  // Preserve the current user turn at full fidelity (including newly attached
+  // images). Older turns can use the same compact representation as recovery
+  // storage so long-running chats do not grow the provider request forever.
+  let selected = apiMessages.slice(latestUserIndex);
+  const history = apiMessages
+    .slice(0, latestUserIndex)
+    .map(compactMessageForStorage);
+  let cursor = history.length;
+
+  while (cursor > 0) {
+    let turnStart = cursor - 1;
+    while (turnStart > 0 && history[turnStart].role !== "user") {
+      turnStart -= 1;
+    }
+    if (history[turnStart].role !== "user") break;
+
+    const candidate = [...history.slice(turnStart, cursor), ...selected];
+    if (
+      candidate.length > MAX_CHAT_REQUEST_MESSAGES ||
+      JSON.stringify(candidate).length > MAX_CHAT_REQUEST_HISTORY_CHARS
+    ) {
+      break;
+    }
+    selected = candidate;
+    cursor = turnStart;
+  }
+
+  return selected;
+}
+
+function compactConversationHistoryForStorage(
+  conversations: PanelAgentStoredConversation[],
+): PanelAgentStoredConversation[] {
+  const compacted: PanelAgentStoredConversation[] = [];
+
+  for (const conversation of conversations.slice(0, MAX_STORED_CONVERSATIONS)) {
+    const candidate: PanelAgentStoredConversation = {
+      ...conversation,
+      messages: compactMessagesForStorage(conversation.messages, 160_000),
+    };
+    const next = [...compacted, candidate];
+    if (JSON.stringify(next).length > MAX_STORED_CONVERSATION_HISTORY_CHARS) {
+      break;
+    }
+    compacted.push(candidate);
+  }
+
+  return compacted;
+}
+
+function safeSetPanelAgentStorage(key: string, value: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    window.localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function readStoredConversationHistory(): PanelAgentStoredConversation[] {
   if (typeof window === "undefined") return [];
   try {
@@ -216,10 +425,28 @@ function readStoredConversationHistory(): PanelAgentStoredConversation[] {
 function writeStoredConversationHistory(
   conversations: PanelAgentStoredConversation[],
 ) {
-  window.localStorage.setItem(
-    PANEL_AGENT_CONVERSATION_HISTORY_STORAGE_KEY,
-    JSON.stringify(conversations.slice(0, MAX_STORED_CONVERSATIONS)),
-  );
+  if (typeof window === "undefined") return;
+  const compacted = compactConversationHistoryForStorage(conversations);
+  const serialized = JSON.stringify(compacted);
+  if (
+    serialized.length <= MAX_STORED_CONVERSATION_HISTORY_CHARS &&
+    safeSetPanelAgentStorage(
+      PANEL_AGENT_CONVERSATION_HISTORY_STORAGE_KEY,
+      serialized,
+    )
+  ) {
+    return;
+  }
+
+  // Never let storage pressure crash New chat/AppShell. If the origin is
+  // already full, discard archived snapshots before touching the active chat.
+  try {
+    window.localStorage.removeItem(
+      PANEL_AGENT_CONVERSATION_HISTORY_STORAGE_KEY,
+    );
+  } catch {
+    // Storage can also throw in privacy/restricted environments.
+  }
 }
 function readStoredLiveConversation(): PanelAgentUiMessage[] {
   if (typeof window === "undefined") return [];
@@ -260,15 +487,50 @@ function writeStoredLiveConversation(messages: PanelAgentUiMessage[]) {
       window.localStorage.removeItem(PANEL_AGENT_LIVE_CONVERSATION_STORAGE_KEY);
       return;
     }
-    window.localStorage.setItem(
+  } catch {
+    return;
+  }
+
+  const compacted = compactMessagesForStorage(
+    toApiMessages(messages),
+    MAX_STORED_LIVE_CONVERSATION_CHARS - 64,
+  );
+  const serialized = JSON.stringify({
+    updatedAt: Date.now(),
+    messages: compacted,
+  });
+  if (
+    serialized.length <= MAX_STORED_LIVE_CONVERSATION_CHARS &&
+    safeSetPanelAgentStorage(
       PANEL_AGENT_LIVE_CONVERSATION_STORAGE_KEY,
-      JSON.stringify({
-        updatedAt: Date.now(),
-        messages: toApiMessages(messages),
-      }),
+      serialized,
+    )
+  ) {
+    return;
+  }
+
+  // Prefer keeping the active chat recoverable over old archives. A legacy
+  // unbounded history key may already have consumed the quota.
+  try {
+    window.localStorage.removeItem(
+      PANEL_AGENT_CONVERSATION_HISTORY_STORAGE_KEY,
     );
   } catch {
-    // Ignore storage failures; the mounted component state remains authoritative.
+    // Best effort only.
+  }
+  if (
+    safeSetPanelAgentStorage(
+      PANEL_AGENT_LIVE_CONVERSATION_STORAGE_KEY,
+      serialized,
+    )
+  ) {
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(PANEL_AGENT_LIVE_CONVERSATION_STORAGE_KEY);
+  } catch {
+    // Mounted state still contains the complete conversation.
   }
 }
 
@@ -468,6 +730,11 @@ export function PanelAgentPanel({
   useEffect(() => {
     writeStoredLiveConversation(messages);
   }, [messages]);
+
+  useEffect(() => {
+    // Also compacts legacy unbounded history snapshots on first mount.
+    writeStoredConversationHistory(conversationHistory);
+  }, [conversationHistory]);
 
   const activeTerminalTab = useMemo(
     () => terminalTabs.find((tab) => tab.id === activeTabId) ?? terminalTabs[0],
@@ -697,7 +964,7 @@ export function PanelAgentPanel({
       signal.throwIfAborted();
       const response = await sendPanelAgentChat(
         {
-          messages: toApiMessages(history),
+          messages: toBoundedRequestMessages(history),
           skillIds: [...selectedSkillIds],
           targets: selectedTargets(),
           model: selectedModel.trim() || undefined,
@@ -856,11 +1123,9 @@ export function PanelAgentPanel({
       updatedAt: Date.now(),
       messages: toApiMessages(messages),
     };
-    setConversationHistory((current) => {
-      const next = [record, ...current].slice(0, MAX_STORED_CONVERSATIONS);
-      writeStoredConversationHistory(next);
-      return next;
-    });
+    setConversationHistory((current) =>
+      [record, ...current].slice(0, MAX_STORED_CONVERSATIONS),
+    );
   }
 
   function clearConversation() {

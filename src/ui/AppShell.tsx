@@ -243,6 +243,85 @@ type PendingTabClose = {
   confirmLabel: string;
 };
 
+const AGENT_TAB_SESSION_STORAGE_KEY = "termix.agentTabs.v1";
+const MAX_SESSION_STORED_AGENT_TABS = 16;
+
+type StoredAgentTab = {
+  agentSessionId: string;
+  instanceId: string;
+  hostId: string;
+  label: string;
+  openedAt: number;
+};
+
+function readStoredAgentTabs(): StoredAgentTab[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.sessionStorage.getItem(AGENT_TAB_SESSION_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item): item is StoredAgentTab => {
+        if (!item || typeof item !== "object") return false;
+        const candidate = item as Partial<StoredAgentTab>;
+        return (
+          typeof candidate.agentSessionId === "string" &&
+          candidate.agentSessionId.length > 0 &&
+          typeof candidate.instanceId === "string" &&
+          candidate.instanceId.length > 0 &&
+          typeof candidate.hostId === "string" &&
+          candidate.hostId.length > 0 &&
+          typeof candidate.label === "string" &&
+          typeof candidate.openedAt === "number"
+        );
+      })
+      .slice(0, MAX_SESSION_STORED_AGENT_TABS);
+  } catch {
+    return [];
+  }
+}
+
+function safeSetAppShellStorage(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // UI preferences are best-effort. Storage pressure must never unmount the shell.
+  }
+}
+
+function writeStoredAgentTabs(tabs: Tab[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    const records: StoredAgentTab[] = tabs
+      .filter(
+        (tab) =>
+          tab.type === "terminal" &&
+          Boolean(tab.agentSessionId) &&
+          Boolean(tab.host?.id),
+      )
+      .slice(0, MAX_SESSION_STORED_AGENT_TABS)
+      .map((tab) => ({
+        agentSessionId: tab.agentSessionId!,
+        instanceId: tab.instanceId,
+        hostId: String(tab.host!.id),
+        label: tab.label,
+        openedAt: tab.openedAt,
+      }));
+
+    if (records.length === 0) {
+      window.sessionStorage.removeItem(AGENT_TAB_SESSION_STORAGE_KEY);
+      return;
+    }
+    window.sessionStorage.setItem(
+      AGENT_TAB_SESSION_STORAGE_KEY,
+      JSON.stringify(records),
+    );
+  } catch {
+    // Recovery metadata is best-effort and must never destabilize AppShell.
+  }
+}
+
 // ─── AppShell ────────────────────────────────────────────────────────────────
 
 function AppShellContent({
@@ -346,11 +425,11 @@ function AppShellContent({
   );
 
   useEffect(() => {
-    localStorage.setItem("termix_sidebarWidth", String(sidebarWidth));
+    safeSetAppShellStorage("termix_sidebarWidth", String(sidebarWidth));
   }, [sidebarWidth]);
 
   useEffect(() => {
-    localStorage.setItem("termix_splitMode", splitMode);
+    safeSetAppShellStorage("termix_splitMode", splitMode);
   }, [splitMode]);
 
   useEffect(() => {
@@ -361,7 +440,10 @@ function AppShellContent({
       if (id == null) return null;
       return tabs.find((t) => t.id === id)?.instanceId ?? null;
     });
-    localStorage.setItem("termix_paneInstanceIds", JSON.stringify(instanceIds));
+    safeSetAppShellStorage(
+      "termix_paneInstanceIds",
+      JSON.stringify(instanceIds),
+    );
   }, [paneTabIds, tabs]);
 
   const isMobile = useIsMobile();
@@ -789,12 +871,15 @@ function AppShellContent({
             };
             for (const key of SNAPSHOT_KEYS)
               snap[key] = localStorage.getItem(key);
-            localStorage.setItem("termix-local-snapshot", JSON.stringify(snap));
+            safeSetAppShellStorage(
+              "termix-local-snapshot",
+              JSON.stringify(snap),
+            );
           }
           if (prefs.theme) setTheme(prefs.theme as ThemeId);
           if (prefs.fontSize) applyFontSize(prefs.fontSize as FontSizeId);
           if (prefs.accentColor) {
-            localStorage.setItem("termix-accent", prefs.accentColor);
+            safeSetAppShellStorage("termix-accent", prefs.accentColor);
             applyAccentColor(prefs.accentColor);
           }
           if (prefs.language && prefs.language !== i18n.language) {
@@ -804,7 +889,7 @@ function AppShellContent({
             prefs.commandAutocomplete !== null &&
             prefs.commandAutocomplete !== undefined
           )
-            localStorage.setItem(
+            safeSetAppShellStorage(
               "commandAutocomplete",
               String(prefs.commandAutocomplete),
             );
@@ -812,31 +897,31 @@ function AppShellContent({
             prefs.commandPaletteEnabled !== null &&
             prefs.commandPaletteEnabled !== undefined
           )
-            localStorage.setItem(
+            safeSetAppShellStorage(
               "commandPaletteShortcutEnabled",
               String(prefs.commandPaletteEnabled),
             );
           if (prefs.showHostTags !== null && prefs.showHostTags !== undefined) {
-            localStorage.setItem("showHostTags", String(prefs.showHostTags));
+            safeSetAppShellStorage("showHostTags", String(prefs.showHostTags));
             window.dispatchEvent(new CustomEvent("showHostTagsChanged"));
           }
           if (
             prefs.hostTrayOnClick !== null &&
             prefs.hostTrayOnClick !== undefined
           )
-            localStorage.setItem(
+            safeSetAppShellStorage(
               "hostTrayOnClick",
               String(prefs.hostTrayOnClick),
             );
           if (prefs.pinAppRail !== null && prefs.pinAppRail !== undefined) {
-            localStorage.setItem("pinAppRail", String(prefs.pinAppRail));
+            safeSetAppShellStorage("pinAppRail", String(prefs.pinAppRail));
             window.dispatchEvent(new Event("pinAppRailChanged"));
           }
           if (
             prefs.expandAppRailOnHover !== null &&
             prefs.expandAppRailOnHover !== undefined
           ) {
-            localStorage.setItem(
+            safeSetAppShellStorage(
               "expandAppRailOnHover",
               String(prefs.expandAppRailOnHover),
             );
@@ -846,7 +931,7 @@ function AppShellContent({
             prefs.foldersCollapsed !== null &&
             prefs.foldersCollapsed !== undefined
           )
-            localStorage.setItem(
+            safeSetAppShellStorage(
               "defaultSnippetFoldersCollapsed",
               String(prefs.foldersCollapsed),
             );
@@ -854,7 +939,7 @@ function AppShellContent({
             prefs.confirmSnippetExecution !== null &&
             prefs.confirmSnippetExecution !== undefined
           )
-            localStorage.setItem(
+            safeSetAppShellStorage(
               "confirmSnippetExecution",
               String(prefs.confirmSnippetExecution),
             );
@@ -862,7 +947,7 @@ function AppShellContent({
             prefs.disableUpdateCheck !== null &&
             prefs.disableUpdateCheck !== undefined
           )
-            localStorage.setItem(
+            safeSetAppShellStorage(
               "disableUpdateCheck",
               String(prefs.disableUpdateCheck),
             );
@@ -870,7 +955,7 @@ function AppShellContent({
             prefs.confirmTabClose !== null &&
             prefs.confirmTabClose !== undefined
           )
-            localStorage.setItem(
+            safeSetAppShellStorage(
               "confirmTabClose",
               String(prefs.confirmTabClose),
             );
@@ -878,14 +963,14 @@ function AppShellContent({
             prefs.hiddenRailTabs !== null &&
             prefs.hiddenRailTabs !== undefined
           ) {
-            localStorage.setItem("hiddenRailTabs", prefs.hiddenRailTabs);
+            safeSetAppShellStorage("hiddenRailTabs", prefs.hiddenRailTabs);
             window.dispatchEvent(new CustomEvent("hiddenRailTabsChanged"));
           }
           if (
             prefs.terminalDefaultTheme !== null &&
             prefs.terminalDefaultTheme !== undefined
           ) {
-            localStorage.setItem(
+            safeSetAppShellStorage(
               TERMINAL_DEFAULT_THEME_STORAGE_KEY,
               normalizeTerminalDefaultTheme(prefs.terminalDefaultTheme),
             );
@@ -1106,6 +1191,7 @@ function AppShellContent({
   // On load: always read saved tabs from DB so background sessions are preserved across refreshes.
   // If reopenTabsOnLogin is on, also restore them as open tabs in the tab bar.
   const tabRestoreAttemptedRef = useRef(false);
+  const agentTabRecoveryValidatedRef = useRef(false);
   useEffect(() => {
     if (!hostsLoaded || !userPrefsLoaded) return;
     if (tabRestoreAttemptedRef.current) return;
@@ -1113,12 +1199,13 @@ function AppShellContent({
 
     async function loadSavedTabs() {
       try {
-        const [savedTabs, activeSessions] = await Promise.all([
-          getOpenTabs(),
+        const [savedTabsResult, activeSessions] = await Promise.all([
+          getOpenTabs().catch(() => [] as OpenTabRecord[]),
           getActiveSessions(),
         ]);
-
-        if (!Array.isArray(savedTabs) || savedTabs.length === 0) return;
+        agentTabRecoveryValidatedRef.current = true;
+        const savedTabs = Array.isArray(savedTabsResult) ? savedTabsResult : [];
+        const storedAgentTabs = readStoredAgentTabs();
 
         const sessionByInstanceId =
           createActiveSessionByTabInstance(activeSessions);
@@ -1200,6 +1287,46 @@ function AppShellContent({
           });
         }
 
+        const activeAgentById = new Map(
+          activeSessions
+            .filter(
+              (session) =>
+                session.sessionSource === "agent" &&
+                typeof session.agentSessionId === "string" &&
+                session.agentSessionId.length > 0 &&
+                session.isConnected,
+            )
+            .map((session) => [session.agentSessionId!, session]),
+        );
+
+        for (const [index, stored] of storedAgentTabs.entries()) {
+          const liveAgent = activeAgentById.get(stored.agentSessionId);
+          if (!liveAgent) continue;
+
+          const host = allHosts.find(
+            (candidate) =>
+              candidate.id === String(liveAgent.hostId) ||
+              candidate.id === stored.hostId,
+          );
+          if (!host?.enableSsh) continue;
+
+          restoredTabs.push({
+            id: `${host.name}-terminal-agent-${Date.now()}-${index}`,
+            instanceId: stored.instanceId,
+            type: "terminal",
+            label: stored.label || `${liveAgent.hostName} · Agent`,
+            host,
+            openedAt: stored.openedAt || Date.now(),
+            restoredSessionId: null,
+            sessionPinned: false,
+            sessionManagedTmux: false,
+            persistentSessionId: null,
+            persistentTmuxSessionName: null,
+            agentSessionId: stored.agentSessionId,
+            terminalRef: createRef(),
+          });
+        }
+
         setBackgroundTabRecords(backgroundRecords);
         if (restoredTabs.length > 0) {
           setTabs((prev) => {
@@ -1249,6 +1376,14 @@ function AppShellContent({
       // silently fail
     }
   }, [tabsReady, tabs]);
+
+  // Agent terminal tabs intentionally stay out of user_open_tabs, but losing all
+  // in-memory UI state (reload/error-boundary remount) must not orphan a still-running
+  // Agent session. Keep only tiny, non-secret attachment metadata for this browser tab.
+  useEffect(() => {
+    if (!tabsReady || !agentTabRecoveryValidatedRef.current) return;
+    writeStoredAgentTabs(tabs);
+  }, [tabs, tabsReady]);
 
   // Debounced tab-order sync: when tab order changes, patch each persistent tab's tabOrder in DB.
   const orderSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(

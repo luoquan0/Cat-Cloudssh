@@ -319,6 +319,86 @@ describe("PanelAgentPanel", () => {
     expect(screen.getByText("desktop ops")).toBeTruthy();
   });
 
+  it("starts a new chat even when conversation history storage exceeds quota", async () => {
+    panelAgentApi.sendPanelAgentChat.mockResolvedValue({
+      message: {
+        role: "assistant",
+        content: "quota-safe answer",
+        toolCalls: [],
+      },
+    });
+
+    render(<PanelAgentPanel terminalTabs={[]} activeTabId="" />);
+
+    await screen.findByPlaceholderText("panelAgent.chatPlaceholder");
+    fireEvent.change(
+      screen.getByPlaceholderText("panelAgent.chatPlaceholder"),
+      { target: { value: "very long conversation" } },
+    );
+    fireEvent.click(screen.getByText("panelAgent.send"));
+    await screen.findByText("quota-safe answer");
+
+    const nativeSetItem = Storage.prototype.setItem;
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(function (key: string, value: string) {
+        if (key === "panelAgentConversationHistory") {
+          throw new DOMException("quota exceeded", "QuotaExceededError");
+        }
+        return nativeSetItem.call(this, key, value);
+      });
+
+    try {
+      fireEvent.click(
+        screen.getByRole("button", { name: "panelAgent.newChat" }),
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText("very long conversation")).toBeNull();
+        expect(screen.queryByText("quota-safe answer")).toBeNull();
+        expect(screen.getByText("panelAgent.chatEmpty")).toBeTruthy();
+      });
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
+  it("compacts legacy live chat snapshots instead of persisting image data URLs", async () => {
+    const hugeDataUrl = `data:image/png;base64,${"a".repeat(400_000)}`;
+    localStorage.setItem(
+      "panelAgentLiveConversation",
+      JSON.stringify({
+        updatedAt: 1,
+        messages: [
+          {
+            role: "user",
+            content: "keep this message",
+            attachments: [
+              {
+                id: "image-1",
+                name: "large.png",
+                mimeType: "image/png",
+                size: 300_000,
+                kind: "image",
+                dataUrl: hugeDataUrl,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    render(<PanelAgentPanel terminalTabs={[]} activeTabId="" />);
+    await screen.findByText("keep this message");
+
+    await waitFor(() => {
+      const stored = localStorage.getItem("panelAgentLiveConversation") ?? "";
+      expect(stored.length).toBeLessThan(320_000);
+      expect(stored).not.toContain("data:image/png;base64");
+      expect(stored).toContain("keep this message");
+    });
+  });
+
   it("restores the selected model from localStorage", async () => {
     localStorage.setItem("panelAgentSelectedModel", "remembered-model");
     panelAgentApi.getPanelAgentSettings.mockResolvedValueOnce({
@@ -771,6 +851,40 @@ describe("PanelAgentPanel", () => {
 
     await screen.findByText("panelAgent.chatStopped");
     expect(requestSignal?.aborted).toBe(true);
+  });
+
+  it("bounds oversized historical context while preserving the newest user turn", async () => {
+    const storedMessages = Array.from({ length: 20 }, (_, index) => ({
+      role: index % 2 === 0 ? "user" : "assistant",
+      content: `stored-${index}-${"x".repeat(15_000)}`,
+    }));
+    localStorage.setItem(
+      "panelAgentLiveConversation",
+      JSON.stringify({ messages: storedMessages }),
+    );
+    panelAgentApi.sendPanelAgentChat.mockResolvedValueOnce({
+      message: { role: "assistant", content: "bounded", toolCalls: [] },
+    });
+
+    render(<PanelAgentPanel terminalTabs={[]} activeTabId="" />);
+    await screen.findByPlaceholderText("panelAgent.chatPlaceholder");
+
+    fireEvent.change(
+      screen.getByPlaceholderText("panelAgent.chatPlaceholder"),
+      { target: { value: "latest request" } },
+    );
+    fireEvent.click(screen.getByText("panelAgent.send"));
+    await screen.findByText("bounded");
+
+    const payload = panelAgentApi.sendPanelAgentChat.mock.calls[0][0];
+    expect(JSON.stringify(payload.messages).length).toBeLessThanOrEqual(
+      240_000,
+    );
+    expect(payload.messages.length).toBeLessThan(21);
+    expect(payload.messages.at(-1)).toEqual({
+      role: "user",
+      content: "latest request",
+    });
   });
 
   it("sends the full live chat history to the backend", async () => {
