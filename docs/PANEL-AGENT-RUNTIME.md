@@ -36,11 +36,14 @@ Model evidence is budgeted separately from raw tool output. The runtime reserves
 
 No finite server can accept unlimited output. Raw stdout/stderr are streamed into separate files with backpressure, not accumulated in React or an unbounded memory string. Defaults:
 
-| Setting | Default | Purpose |
-| --- | --- | --- |
-| `PANEL_AGENT_CONCURRENT_RUNS` | 8 | Concurrent backend execution capacity, not total conversation rounds |
-| `PANEL_AGENT_COMMAND_TIMEOUT_MS` | 600000 | Default job deadline; a requested per-job deadline can be up to 24 hours |
-| `PANEL_AGENT_OUTPUT_DIR` | under the existing application data directory | Raw job logs |
+| Setting                          | Default                                       | Purpose                                                                  |
+| -------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------ |
+| `PANEL_AGENT_CONCURRENT_RUNS`    | 8                                             | Concurrent backend execution capacity, not total conversation rounds     |
+| `PANEL_AGENT_COMMAND_TIMEOUT_MS` | 600000                                        | Default job deadline; a requested per-job deadline can be up to 24 hours |
+| `PANEL_AGENT_CONCURRENT_JOBS`    | 8                                             | Concurrent independent SSH channels                                      |
+| `PANEL_AGENT_JOB_LOG_BYTES`      | 536870912                                     | Per-job physical log safeguard                                           |
+| `PANEL_AGENT_LOG_BYTES`          | 4294967296                                    | Global physical log safeguard                                            |
+| `PANEL_AGENT_OUTPUT_DIR`         | under the existing application data directory | Raw job logs                                                             |
 
 The implementation also stops output capture at its per-job/global disk safety budgets (512 MiB / 4 GiB defaults), bounds pending output writes and pauses runs under high heap pressure. These are operational safety measures, not model context limits and not automatic chat eviction. A stopped output capture or unknown exit status is reported explicitly. Large deployments should monitor disk, memory and backup size rather than raising these safeguards blindly.
 

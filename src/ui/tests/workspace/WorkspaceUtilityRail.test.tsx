@@ -14,8 +14,8 @@ vi.mock("@/workspace/WorkspaceContext", () => ({
   }),
 }));
 
-vi.mock("@/sidebar/PanelAgentPanel", () => ({
-  PanelAgentPanel: ({
+vi.mock("@/sidebar/RuntimePanelAgent", () => ({
+  RuntimePanelAgent: ({
     embedded,
     compact,
     conversationAction,

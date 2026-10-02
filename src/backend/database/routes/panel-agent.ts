@@ -1,3 +1,10 @@
+import { createRuntimeRouter } from "../../panel-runtime/router.js";
+import {
+  createCurrentPanelRuntime,
+  authorizeRuntimeSession,
+  authorizeRuntimeTarget,
+} from "../../panel-runtime/service.js";
+import type { RuntimeModelConfig } from "../../panel-runtime/model.js";
 import express, {
   type NextFunction,
   type Request,
@@ -61,6 +68,7 @@ export interface PanelAgentSettings {
   model: string;
   temperature: number;
   maxTokens: number;
+  contextWindowTokens?: number;
   toolRoundLimit: number;
   multiServerEnabled: boolean;
   maxTargets: number;
@@ -185,6 +193,7 @@ function defaultStoredSettings(): StoredPanelAgentSettings {
     model: process.env.PANEL_AGENT_MODEL ?? "",
     temperature: 0.2,
     maxTokens: 1_800,
+    contextWindowTokens: 32768,
     toolRoundLimit: 20,
     multiServerEnabled: true,
     maxTargets: 4,
@@ -253,6 +262,9 @@ function sanitizeStoredSettings(raw: unknown): StoredPanelAgentSettings {
         256,
         MAX_PANEL_AGENT_MAX_TOKENS,
       ),
+    ),
+    contextWindowTokens: Math.round(
+      numberInRange(value.contextWindowTokens, 32768, 4096, 2000000),
     ),
     toolRoundLimit: Math.round(
       numberInRange(
@@ -1175,6 +1187,26 @@ export function createPanelAgentRouter(
 ) {
   const router = express.Router();
   const fetchImpl = dependencies.fetchImpl ?? fetch;
+  const runtimeConfig = async (): Promise<RuntimeModelConfig> => ({
+    ...(await readStoredSettings(dependencies.settings)),
+    apiKey:
+      process.env.PANEL_AGENT_API_KEY ||
+      (await dependencies.settings.get(PANEL_AGENT_API_KEY)) ||
+      "",
+  });
+  let backgroundRuntime:
+    | ReturnType<typeof createCurrentPanelRuntime>
+    | undefined;
+  router.use(
+    "/runtime",
+    createRuntimeRouter(dependencies.authenticate, {
+      runtime: () =>
+        (backgroundRuntime ??= createCurrentPanelRuntime(runtimeConfig)),
+      config: runtimeConfig,
+      session: authorizeRuntimeSession,
+      target: authorizeRuntimeTarget,
+    }),
+  );
 
   router.get(
     "/settings",

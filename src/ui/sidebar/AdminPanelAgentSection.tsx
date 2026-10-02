@@ -283,6 +283,22 @@ export function AdminPanelAgentSection({
               </label>
             </div>
 
+            <label className="grid gap-1 text-[11px] text-muted-foreground">
+              Agent 模型上下文窗口（tokens；按服务商实际配置填写）
+              <Input
+                type="number"
+                min="4096"
+                max="2000000"
+                value={settings.contextWindowTokens ?? 32768}
+                onChange={(event) =>
+                  update({ contextWindowTokens: Number(event.target.value) })
+                }
+              />
+              <span>
+                默认 32768 是保守值，不代表模型真实上限。不同模型可通过
+                PANEL_AGENT_MODEL_CONTEXT_WINDOWS 分别配置。
+              </span>
+            </label>
             <div className="flex items-center justify-between gap-3 border border-border bg-background p-3">
               <div>
                 <div className="text-xs font-semibold text-foreground">

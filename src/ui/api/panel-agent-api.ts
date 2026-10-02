@@ -38,6 +38,7 @@ export type PanelAgentSettings = {
   model: string;
   temperature: number;
   maxTokens: number;
+  contextWindowTokens?: number;
   toolRoundLimit: number;
   multiServerEnabled: boolean;
   maxTargets: number;
@@ -77,7 +78,10 @@ export type PanelAgentGenerateInput = {
 
 export type PanelAgentToolName =
   | "run_terminal_command"
-  | "read_terminal_context";
+  | "read_terminal_context"
+  | "run_command"
+  | "read_job_output"
+  | "cancel_job";
 
 export type PanelAgentToolCall = {
   id: string;

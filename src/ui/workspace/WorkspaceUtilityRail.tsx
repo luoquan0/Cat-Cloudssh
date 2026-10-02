@@ -28,10 +28,8 @@ import {
   getProjectAgentActivity,
   type AgentActivity,
 } from "@/api/workspace-api";
-import {
-  PanelAgentPanel,
-  type PanelAgentConversationAction,
-} from "@/sidebar/PanelAgentPanel";
+import { RuntimePanelAgent as PanelAgentPanel } from "@/sidebar/RuntimePanelAgent";
+import type { PanelAgentConversationAction } from "@/sidebar/PanelAgentPanel";
 import type { Host, Tab } from "@/types/ui-types";
 
 type UtilityView = "activity" | null;
