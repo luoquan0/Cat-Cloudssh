@@ -48,8 +48,9 @@ function pointer(key: string, value: string | null) {
   }
 }
 export function createRuntimeClientId(
-  cryptoApi: Pick<Crypto, "randomUUID" | "getRandomValues"> | undefined =
-    globalThis.crypto,
+  cryptoApi:
+    | Pick<Crypto, "randomUUID" | "getRandomValues">
+    | undefined = globalThis.crypto,
 ) {
   if (typeof cryptoApi?.randomUUID === "function") {
     return cryptoApi.randomUUID();
