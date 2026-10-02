@@ -31,7 +31,10 @@ vi.mock("sonner", () => ({
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
-import { createRuntimeClientId, RuntimePanelAgent } from "@/sidebar/RuntimePanelAgent";
+import {
+  createRuntimeClientId,
+  RuntimePanelAgent,
+} from "@/sidebar/RuntimePanelAgent";
 import { RuntimeToolCard } from "@/sidebar/RuntimeToolCard";
 let snapshot: RuntimeSnapshot;
 function makeRun(status: RuntimeRun["status"] = "completed"): RuntimeRun {
