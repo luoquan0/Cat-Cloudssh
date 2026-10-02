@@ -1,3 +1,5 @@
+import type { PanelRuntimeBridge } from "./PanelRuntimeBridge";
+import { RuntimeToolCard } from "./RuntimeToolCard";
 import {
   useCallback,
   useEffect,
@@ -598,9 +600,7 @@ async function fileToAttachment(file: File): Promise<PanelAgentChatAttachment> {
 }
 
 function sleep(ms: number) {
-  const { promise, resolve } = Promise.withResolvers<void>();
-  window.setTimeout(resolve, ms);
-  return promise;
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 }
 
 function stringArg(value: unknown): string {
@@ -655,7 +655,10 @@ function parseToolResult(content: string): ToolResultPayload | null {
 function toolCallSummary(toolCall: PanelAgentToolCall) {
   const args = toolCall.arguments ?? {};
   const targetId = stringArg(args.targetId);
-  if (toolCall.name === "run_terminal_command") {
+  if (
+    toolCall.name === "run_terminal_command" ||
+    toolCall.name === "run_command"
+  ) {
     const command = stringArg(args.command);
     return `${toolCall.name}${targetId ? ` · ${targetId}` : ""}${command ? ` · ${command}` : ""}`;
   }
@@ -678,21 +681,29 @@ export function PanelAgentPanel({
   embedded = false,
   compact = false,
   conversationAction = null,
+  runtimeBridge,
 }: {
   terminalTabs: Tab[];
   activeTabId: string;
   embedded?: boolean;
   compact?: boolean;
   conversationAction?: PanelAgentConversationAction | null;
+  runtimeBridge?: PanelRuntimeBridge;
 }) {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<PanelAgentSettings | null>(null);
   const [draft, setDraft] = useState("");
-  const [selectedTabIds, setSelectedTabIds] = useState<Set<string>>(new Set());
-  const [messages, setMessages] = useState<PanelAgentUiMessage[]>(
-    readStoredLiveConversation,
+  const runtimeMode = Boolean(runtimeBridge);
+  const [selectedTabIds, setSelectedTabIds] = useState<Set<string>>(
+    () => new Set(runtimeBridge?.initialTargetIds ?? []),
   );
-  const [working, setWorking] = useState(false);
+  const [localMessages, setLocalMessages] = useState<PanelAgentUiMessage[]>(
+    () => (runtimeBridge ? [] : readStoredLiveConversation()),
+  );
+  const messages = runtimeBridge?.messages ?? localMessages;
+  const setMessages = runtimeBridge?.setMessages ?? setLocalMessages;
+  const [localWorking, setWorking] = useState(false);
+  const working = runtimeBridge?.working ?? localWorking;
   const [selectedModel, setSelectedModel] = useState(readStoredSelectedModel);
   const [models, setModels] = useState(readStoredModelList);
   const [modelsLoading, setModelsLoading] = useState(false);
@@ -702,8 +713,8 @@ export function PanelAgentPanel({
   );
   const [historyOpen, setHistoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [conversationHistory, setConversationHistory] = useState(
-    readStoredConversationHistory,
+  const [conversationHistory, setConversationHistory] = useState(() =>
+    runtimeBridge ? [] : readStoredConversationHistory(),
   );
   const [selectedSkillIds, setSelectedSkillIds] = useState<Set<string>>(
     new Set(),
@@ -728,13 +739,13 @@ export function PanelAgentPanel({
   }, [t]);
 
   useEffect(() => {
-    writeStoredLiveConversation(messages);
-  }, [messages]);
+    if (!runtimeMode) writeStoredLiveConversation(messages);
+  }, [messages, runtimeMode]);
 
   useEffect(() => {
     // Also compacts legacy unbounded history snapshots on first mount.
-    writeStoredConversationHistory(conversationHistory);
-  }, [conversationHistory]);
+    if (!runtimeMode) writeStoredConversationHistory(conversationHistory);
+  }, [conversationHistory, runtimeMode]);
 
   const activeTerminalTab = useMemo(
     () => terminalTabs.find((tab) => tab.id === activeTabId) ?? terminalTabs[0],
@@ -742,10 +753,10 @@ export function PanelAgentPanel({
   );
 
   useEffect(() => {
-    if (activeTerminalTab && selectedTabIds.size === 0) {
+    if (!runtimeMode && activeTerminalTab && selectedTabIds.size === 0) {
       setSelectedTabIds(new Set([activeTerminalTab.id]));
     }
-  }, [activeTerminalTab, selectedTabIds.size]);
+  }, [activeTerminalTab, selectedTabIds.size, runtimeMode]);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -863,7 +874,9 @@ export function PanelAgentPanel({
           sessionId: context?.sessionId ?? tab.persistentSessionId ?? null,
           agentSessionId: context?.agentSessionId ?? tab.agentSessionId ?? null,
           connected: context?.connected ?? handle?.isConnected?.() ?? false,
-          recentOutput: handle?.getRecentOutput?.(5000) ?? "",
+          recentOutput: runtimeMode
+            ? ""
+            : (handle?.getRecentOutput?.(5000) ?? ""),
         };
       });
   }
@@ -1008,6 +1021,16 @@ export function PanelAgentPanel({
     seedMessages: PanelAgentUiMessage[],
     userMessageId: string,
   ) {
+    if (runtimeBridge) {
+      const message = seedMessages.find((item) => item.id === userMessageId);
+      if (message)
+        await runtimeBridge.start(message, selectedTargets(), {
+          model: selectedModel.trim() || undefined,
+          reasoningEffort: thinkingMode,
+          skillIds: [...selectedSkillIds],
+        });
+      return;
+    }
     abortControllerRef.current?.abort();
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -1096,6 +1119,10 @@ export function PanelAgentPanel({
   function retryFromMessage(index: number) {
     const message = messages[index];
     if (!message || message.role !== "user") return;
+    if (runtimeBridge) {
+      runtimeBridge.retry(message);
+      return;
+    }
     const nextMessages = messages
       .slice(0, index + 1)
       .map((item) =>
@@ -1106,6 +1133,10 @@ export function PanelAgentPanel({
   }
 
   function stopConversation() {
+    if (runtimeBridge) {
+      runtimeBridge.stop();
+      return;
+    }
     abortControllerRef.current?.abort();
   }
 
@@ -1129,6 +1160,10 @@ export function PanelAgentPanel({
   }
 
   function clearConversation() {
+    if (runtimeBridge) {
+      runtimeBridge.clear();
+      return;
+    }
     abortConversation();
     setMessages([]);
     setAttachments([]);
@@ -1137,6 +1172,10 @@ export function PanelAgentPanel({
   }
 
   function newConversation() {
+    if (runtimeBridge) {
+      runtimeBridge.newChat();
+      return;
+    }
     abortConversation();
     archiveCurrentConversation();
     setMessages([]);
@@ -1146,6 +1185,7 @@ export function PanelAgentPanel({
   }
 
   function toggleHistory() {
+    if (runtimeBridge && !historyOpen) runtimeBridge.refreshHistory();
     setSettingsOpen(false);
     setHistoryOpen((current) => !current);
   }
@@ -1180,6 +1220,10 @@ export function PanelAgentPanel({
   }, [conversationAction]);
 
   function renderToolMessage(message: PanelAgentChatMessage, index: number) {
+    if (runtimeBridge)
+      return (
+        <RuntimeToolCard key={message.toolCallId ?? index} message={message} />
+      );
     const payload = parseToolResult(message.content);
     return (
       <div
@@ -1307,7 +1351,11 @@ export function PanelAgentPanel({
     settings && !adminConfigMissing && !hasSelectedModel,
   );
 
-  const sendDisabled = adminConfigMissing || modelMissing || !settings;
+  const sendDisabled =
+    adminConfigMissing ||
+    modelMissing ||
+    !settings ||
+    Boolean(runtimeBridge?.blocked);
   const chatDisabled = working || sendDisabled;
   function handleDraftKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.nativeEvent.isComposing) return;
@@ -1527,6 +1575,7 @@ export function PanelAgentPanel({
   }
 
   function renderHistoryPanel() {
+    if (runtimeBridge) return runtimeBridge.history;
     return (
       <div data-testid="panel-agent-history" className="space-y-2 text-xs">
         <div className="flex items-center justify-between gap-2">
@@ -1765,6 +1814,7 @@ export function PanelAgentPanel({
                 {t("panelAgent.working")}
               </div>
             )}
+            {runtimeBridge?.status}
             <div ref={latestMessageRef} className="h-px" aria-hidden="true" />
           </div>
           {attachments.length > 0 && (
@@ -1859,6 +1909,7 @@ export function PanelAgentPanel({
             </Button>
             {renderModelSelector(compact)}
             {renderThinkingSelector(compact)}
+            {runtimeBridge?.toolbar}
             <Button
               type="button"
               size={compact ? "icon" : "default"}

@@ -30,6 +30,11 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: 读取应用版本
+        id: version
+        run: |
+          node -e 'const fs = require("node:fs"); const version = JSON.parse(fs.readFileSync("package.json", "utf8")).version; if (!/^[0-9]+\.[0-9]+\.[0-9]+-cloudssh\.[0-9]+$/.test(version)) throw new Error("Invalid CloudSSH version"); fs.appendFileSync(process.env.GITHUB_OUTPUT, "version=" + version + "\n");'
+
       - name: 配置 QEMU
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 
@@ -51,7 +56,10 @@ jobs:
           tags: |
             type=ref,event=branch
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.version.outputs.version }},enable={{is_default_branch}}
             type=sha,prefix=sha-
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
 
       - name: 构建并推送 CloudSSH 快速镜像
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
