@@ -85,6 +85,21 @@ describe("WorkspaceUtilityRail", () => {
     expect(Number.parseInt(floatButton.style.left, 10)).toBe(320);
   });
 
+  it("keeps desktop dock measurement ref stable across unrelated rerenders", () => {
+    renderRail();
+
+    const floatButton = screen.getByRole("button", {
+      name: "workspace.utility.agentFloatDesktop",
+    });
+    const measure = vi.spyOn(floatButton, "getBoundingClientRect");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "workspace.utility.activityLog" }),
+    );
+
+    expect(measure).not.toHaveBeenCalled();
+  });
+
   it("opens the desktop Agent as a draggable floating window", async () => {
     renderRail();
 
