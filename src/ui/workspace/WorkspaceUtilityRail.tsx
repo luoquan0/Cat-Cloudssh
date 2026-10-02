@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -311,26 +312,39 @@ export function WorkspaceUtilityRail({
   const [desktopConversationAction, setDesktopConversationAction] =
     useState<PanelAgentConversationAction | null>(null);
 
-  function rememberDesktopFloatSize(
-    kind: Exclude<DesktopAgentDragKind, "panel">,
-    element: HTMLButtonElement | null,
-  ) {
-    if (!element) return;
-    const fallback =
-      kind === "hidden" ? DESKTOP_AGENT_HIDDEN_SIZE : DESKTOP_AGENT_DOCK_SIZE;
-    const rect = element.getBoundingClientRect();
-    const next = {
-      width: Math.ceil(rect.width) || fallback.width,
-      height: Math.ceil(rect.height) || fallback.height,
-    };
-    const updateSize =
-      kind === "hidden" ? setDesktopHiddenSize : setDesktopDockSize;
-    updateSize((current) =>
-      current.width === next.width && current.height === next.height
-        ? current
-        : next,
-    );
-  }
+  const rememberDesktopDockSize = useCallback(
+    (element: HTMLButtonElement | null) => {
+      if (!element) return;
+      const rect = element.getBoundingClientRect();
+      const next = {
+        width: Math.ceil(rect.width) || DESKTOP_AGENT_DOCK_SIZE.width,
+        height: Math.ceil(rect.height) || DESKTOP_AGENT_DOCK_SIZE.height,
+      };
+      setDesktopDockSize((current) =>
+        current.width === next.width && current.height === next.height
+          ? current
+          : next,
+      );
+    },
+    [],
+  );
+
+  const rememberDesktopHiddenSize = useCallback(
+    (element: HTMLButtonElement | null) => {
+      if (!element) return;
+      const rect = element.getBoundingClientRect();
+      const next = {
+        width: Math.ceil(rect.width) || DESKTOP_AGENT_HIDDEN_SIZE.width,
+        height: Math.ceil(rect.height) || DESKTOP_AGENT_HIDDEN_SIZE.height,
+      };
+      setDesktopHiddenSize((current) =>
+        current.width === next.width && current.height === next.height
+          ? current
+          : next,
+      );
+    },
+    [],
+  );
 
   useEffect(() => {
     writeLocalStorage(UTILITY_PANEL_WIDTH_KEY, String(panelWidth));
@@ -944,7 +958,7 @@ export function WorkspaceUtilityRail({
             type="button"
             className="fixed z-50 flex size-11 items-center justify-center rounded-full border border-accent-brand/35 bg-background/55 text-accent-brand shadow-xl shadow-black/20 backdrop-blur-2xl active:scale-95 dark:bg-zinc-950/45"
             style={desktopAgentDockStyle}
-            ref={(element) => rememberDesktopFloatSize("hidden", element)}
+            ref={rememberDesktopHiddenSize}
             onClick={() => setDesktopAgentMode("bubble")}
             aria-label={t("workspace.utility.agentFloatRestore")}
             title={t("workspace.utility.agentFloatRestore")}
@@ -956,7 +970,7 @@ export function WorkspaceUtilityRail({
             type="button"
             className="fixed z-50 flex h-12 touch-none select-none items-center gap-2 rounded-full border border-accent-brand/25 bg-background/45 py-2 pl-2 pr-3 text-accent-brand shadow-xl shadow-black/20 backdrop-blur-2xl active:scale-95 dark:bg-zinc-950/45"
             style={desktopAgentDockStyle}
-            ref={(element) => rememberDesktopFloatSize("dock", element)}
+            ref={rememberDesktopDockSize}
             onPointerDown={(event) =>
               onDesktopAgentDragPointerDown(event, "dock")
             }

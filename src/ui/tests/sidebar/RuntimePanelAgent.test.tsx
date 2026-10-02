@@ -31,7 +31,10 @@ vi.mock("sonner", () => ({
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
-import { RuntimePanelAgent } from "@/sidebar/RuntimePanelAgent";
+import {
+  createRuntimeClientId,
+  RuntimePanelAgent,
+} from "@/sidebar/RuntimePanelAgent";
 import { RuntimeToolCard } from "@/sidebar/RuntimeToolCard";
 let snapshot: RuntimeSnapshot;
 function makeRun(status: RuntimeRun["status"] = "completed"): RuntimeRun {
@@ -140,6 +143,22 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 describe("runtime-backed existing Agent view", () => {
+  it("creates valid runtime IDs when randomUUID is unavailable", () => {
+    let seed = 0;
+    const id = createRuntimeClientId({
+      getRandomValues: ((array: Uint8Array) => {
+        for (let index = 0; index < array.length; index += 1) {
+          array[index] = (seed++ * 17 + 3) & 0xff;
+        }
+        return array;
+      }) as Crypto["getRandomValues"],
+    } as Pick<Crypto, "randomUUID" | "getRandomValues">);
+
+    expect(id).toMatch(
+      /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/,
+    );
+  });
+
   it("sends only a user task to the backend, never types commands or reads the human terminal", async () => {
     const terminal = tab();
     render(

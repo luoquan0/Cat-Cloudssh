@@ -1,4 +1,8 @@
-# Panel Agent runtime - 2.6.0-cloudssh.57
+# Panel Agent runtime - 2.6.0-cloudssh.58
+
+## .58 compatibility hotfix
+
+This hotfix keeps the .57 backend runtime architecture and fixes two browser-side failures seen after deployment. It does not change SSH job execution, context compaction, approval policy, or persisted Agent data. Runtime request/message IDs no longer require `crypto.randomUUID()`; secure random bytes are used when available, with a non-cryptographic uniqueness fallback only when the browser exposes neither UUID nor random bytes. The desktop floating Agent also uses stable measurement refs so ordinary rerenders do not detach/reattach a state-writing callback ref, preventing a React maximum-update-depth loop in affected browser/Radix combinations.
 
 This iteration starts from `.55`. It does not restore the large `.56` conversation-management toolbar or change the human terminal, login system, Docker data mounts, or root keys.
 

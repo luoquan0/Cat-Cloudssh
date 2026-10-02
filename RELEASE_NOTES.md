@@ -49,6 +49,8 @@ https://youtu.be/g0QjNdV3YYY
 
 <!-- BUG_FIXES -->
 
+- Fixed Panel Agent tasks failing on HTTP, older browsers, or embedded WebViews where `crypto.randomUUID()` is unavailable; runtime IDs now use a compatible fallback path.
+- Fixed the floating Agent window repeatedly reattaching a state-writing measurement ref during rerenders, which could trigger React error #185 (maximum update depth exceeded).
 - Fixed macOS Agent login failing to save the generated Ed25519 device private key in Keychain by storing a short PKCS#8 DER base64 value, preserving old PEM reads, and verifying the write to catch truncation.
 - Fixed every saved password SSH connection failing in the web terminal because the legacy database value `"false"` for forced keyboard-interactive authentication was treated as enabled and prevented the password from reaching ssh2.
 - Fixed web connections rewriting managed project credentials from stale legacy host snapshots; project credentials are now read-only during connection and synchronized only by explicit host or credential mutations.
