@@ -1,0 +1,54 @@
+name: CloudSSH format helper
+
+on:
+  push:
+    branches:
+      - format-helper-64
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 1
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Format targeted files
+        run: |
+          npx prettier --write \
+            scripts/cloudssh-release-workflow.test.ts \
+            src/backend/database/database.ts \
+            src/backend/update/routes.ts \
+            src/ui/sidebar/AdminUpdateSection.tsx \
+            src/ui/sidebar/RuntimePanelAgent.tsx \
+            src/ui/tests/sidebar/PanelAgentPanel.test.tsx
+      - name: Commit formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "Already formatted."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            scripts/cloudssh-release-workflow.test.ts \
+            src/backend/database/database.ts \
+            src/backend/update/routes.ts \
+            src/ui/sidebar/AdminUpdateSection.tsx \
+            src/ui/sidebar/RuntimePanelAgent.tsx \
+            src/ui/tests/sidebar/PanelAgentPanel.test.tsx
+          git commit -m "chore: format CloudSSH release files"
+          git push origin HEAD:format-helper-64
