@@ -681,6 +681,7 @@ export function PanelAgentPanel({
   embedded = false,
   compact = false,
   conversationAction = null,
+  onConversationActionHandled,
   runtimeBridge,
 }: {
   terminalTabs: Tab[];
@@ -688,6 +689,7 @@ export function PanelAgentPanel({
   embedded?: boolean;
   compact?: boolean;
   conversationAction?: PanelAgentConversationAction | null;
+  onConversationActionHandled?: (id: number) => void;
   runtimeBridge?: PanelRuntimeBridge;
 }) {
   const { t } = useTranslation();
@@ -1216,8 +1218,9 @@ export function PanelAgentPanel({
     if (!conversationAction) return;
     if (lastConversationActionRef.current === conversationAction.id) return;
     lastConversationActionRef.current = conversationAction.id;
+    onConversationActionHandled?.(conversationAction.id);
     conversationActionHandlersRef.current[conversationAction.type]();
-  }, [conversationAction]);
+  }, [conversationAction, onConversationActionHandled]);
 
   function renderToolMessage(message: PanelAgentChatMessage, index: number) {
     if (runtimeBridge)

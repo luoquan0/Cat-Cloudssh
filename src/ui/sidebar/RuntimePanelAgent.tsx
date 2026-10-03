@@ -169,6 +169,10 @@ export function RuntimePanelAgent(props: {
   useEffect(() => {
     setAction(props.conversationAction ?? null);
   }, [props.conversationAction]);
+
+  const consumeAction = useCallback((id: number) => {
+    setAction((current) => (current?.id === id ? null : current));
+  }, []);
   const install = useCallback((snapshot: RuntimeSnapshot, replace = false) => {
     if (!mounted.current) return;
     if (
@@ -728,6 +732,7 @@ export function RuntimePanelAgent(props: {
       key={viewKey}
       {...props}
       conversationAction={action}
+      onConversationActionHandled={consumeAction}
       runtimeBridge={bridge}
     />
   );

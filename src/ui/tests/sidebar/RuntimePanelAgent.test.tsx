@@ -201,6 +201,24 @@ describe("runtime-backed existing Agent view", () => {
     expect(api.start).not.toHaveBeenCalled();
     expect(api.cancel).not.toHaveBeenCalled();
   });
+  it("consumes a new-chat action once even though resetting remounts the inner panel", async () => {
+    const action = { id: 9001, type: "new" as const };
+    render(
+      <RuntimePanelAgent
+        terminalTabs={[]}
+        activeTabId=""
+        conversationAction={action}
+      />,
+    );
+
+    await ready();
+
+    expect(api.active).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("button", { name: "panelAgent.send" }),
+    ).toBeTruthy();
+  });
+
   it("reuses the exact request ID and user message after a lost acknowledgement", async () => {
     const startImpl = api.start.getMockImplementation()!;
     api.start

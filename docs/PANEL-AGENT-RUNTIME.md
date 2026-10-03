@@ -1,4 +1,8 @@
-# Panel Agent runtime - 2.6.0-cloudssh.58
+# Panel Agent runtime - 2.6.0-cloudssh.59
+
+## .59 new-chat replay hotfix
+
+This hotfix fixes a remount loop in the floating Agent UI. Conversation actions are now consumed before they invoke handlers. A `new` action may still reset and remount the inner chat panel, but the same action ID is cleared in the parent first and therefore cannot be replayed by the newly mounted child.
 
 ## .58 compatibility hotfix
 
