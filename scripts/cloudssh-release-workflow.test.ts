@@ -53,11 +53,17 @@ describe("CloudSSH 正式发版工作流", () => {
     );
     expect(workflow).toContain("workflow_run:");
     expect(workflow).toContain("CloudSSH 快速镜像构建");
-    expect(workflow).toContain("github.event.workflow_run.conclusion == 'success'");
-    expect(workflow).toContain("github.event.workflow_run.head_branch == 'main'");
+    expect(workflow).toContain(
+      "github.event.workflow_run.conclusion == 'success'",
+    );
+    expect(workflow).toContain(
+      "github.event.workflow_run.head_branch == 'main'",
+    );
     expect(workflow).toContain("github.event.workflow_run.head_sha");
     expect(workflow).toContain("TARGET_REVISION");
-    expect(workflow).toContain("检出提交 $REVISION 与触发编译提交 $TARGET_REVISION 不一致");
+    expect(workflow).toContain(
+      "检出提交 $REVISION 与触发编译提交 $TARGET_REVISION 不一致",
+    );
     expect(workflow).toContain("required: false");
   });
 

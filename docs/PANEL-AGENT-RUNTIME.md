@@ -1,6 +1,6 @@
-# Panel Agent runtime - 2.6.0-cloudssh.64
+# Panel Agent runtime - 2.6.0-cloudssh.65
 
-## .64 legacy cache cleanup and long-chat scrolling
+## .65 release-ready legacy cache cleanup and long-chat scrolling
 
 Legacy browser-only Agent conversations now have real deletion controls in runtime history: individual cached conversations can be removed from localStorage and all legacy Agent cache can be cleared at once. Deletion updates the visible history immediately and never deletes backend-owned runtime threads by accident.
 
