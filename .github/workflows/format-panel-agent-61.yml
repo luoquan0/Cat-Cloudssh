@@ -23,7 +23,6 @@ concurrency:
 
 jobs:
   format:
-    if: ${{ !contains(github.event.head_commit.message, 'style(agent): format .61 changes') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
