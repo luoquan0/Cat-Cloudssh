@@ -248,7 +248,6 @@ it("retains the current user's image and text attachment through compaction", ()
   expect(JSON.stringify(messages)).toContain("important instruction");
 });
 
-
 it("describes shared-terminal shell semantics to the model", () => {
   const messages = basePrompt(
     config,

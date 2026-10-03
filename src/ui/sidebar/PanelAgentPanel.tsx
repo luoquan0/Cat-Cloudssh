@@ -1640,7 +1640,8 @@ export function PanelAgentPanel({
               SSH 执行方式
             </div>
             <p className="text-[10px] leading-4 text-muted-foreground">
-              默认独立执行并把过程同步显示到左侧终端；共享模式会使用同一个 PTY，并在 Agent 命令执行期间临时锁定人工输入。
+              默认独立执行并把过程同步显示到左侧终端；共享模式会使用同一个
+              PTY，并在 Agent 命令执行期间临时锁定人工输入。
             </p>
             {(
               [

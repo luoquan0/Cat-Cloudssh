@@ -27,7 +27,8 @@ const databases: Database.Database[] = [];
 const terminalSessions: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
-  for (const id of terminalSessions.splice(0)) sessionManager.destroySession(id);
+  for (const id of terminalSessions.splice(0))
+    sessionManager.destroySession(id);
   for (const db of databases.splice(0)) db.close();
   for (const directory of paths.splice(0))
     await fs.rm(directory, { recursive: true, force: true });
@@ -266,7 +267,6 @@ describe("independent execution", () => {
     ).rejects.toMatchObject({ code: "JOB_SCOPE" });
   });
 });
-
 
 describe("shared terminal execution", () => {
   it("uses the selected live PTY instead of opening a second SSH connection", async () => {

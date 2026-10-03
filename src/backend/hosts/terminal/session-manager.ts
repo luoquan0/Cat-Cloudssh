@@ -880,9 +880,12 @@ class TerminalSessionManager {
       });
     }
     if (session.agentSessionId) {
-      throw Object.assign(new Error("Agent 持续会话不能作为 Panel Agent 共享终端"), {
-        code: "TERMINAL_SESSION_AGENT_CONTROLLED",
-      });
+      throw Object.assign(
+        new Error("Agent 持续会话不能作为 Panel Agent 共享终端"),
+        {
+          code: "TERMINAL_SESSION_AGENT_CONTROLLED",
+        },
+      );
     }
     if (session.pinTransitionActive || session.expirationInProgress) {
       throw Object.assign(new Error("终端正在切换状态，请稍后重试"), {

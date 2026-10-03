@@ -443,17 +443,19 @@ export class RuntimeJobs {
     });
     this.live.set(job.id, { job, controller, done });
     const sshMode = persisted.options.sshMode ?? "isolated";
-    void (sshMode === "shared-terminal"
-      ? this.executeSharedTerminal(owner, target, job, timeout, controller)
-      : this.execute(
-          owner,
-          target,
-          job,
-          timeout,
-          controller,
-          sshMode === "mirror",
-        )
-    ).catch((error) => {
+    void (
+      sshMode === "shared-terminal"
+        ? this.executeSharedTerminal(owner, target, job, timeout, controller)
+        : this.execute(
+            owner,
+            target,
+            job,
+            timeout,
+            controller,
+            sshMode === "mirror",
+          )
+    )
+      .catch((error) => {
         job.status = "failed";
         job.error = redactEvidence(
           error instanceof Error ? error.message : String(error),
@@ -586,7 +588,10 @@ export class RuntimeJobs {
             consumeStatus(value.slice(end + endPrefix.length));
             return;
           }
-          const keep = Math.min(value.length, Math.max(0, endPrefix.length - 1));
+          const keep = Math.min(
+            value.length,
+            Math.max(0, endPrefix.length - 1),
+          );
           append(value.slice(0, value.length - keep));
           carry = keep ? value.slice(-keep) : "";
         };
@@ -649,8 +654,7 @@ export class RuntimeJobs {
           : timedOut
             ? "timed_out"
             : "cancelled";
-        job.error ||=
-          "已请求中断共享终端命令；远端前台进程可能需要人工核对";
+        job.error ||= "已请求中断共享终端命令；远端前台进程可能需要人工核对";
       } else if (job.exitCode === null) {
         job.status = "interrupted";
         job.error = "共享终端没有返回命令结束标记，结果未知";

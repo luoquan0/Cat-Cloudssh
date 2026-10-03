@@ -1842,15 +1842,15 @@ const TerminalInner = forwardRef<TerminalHandle, SSHTerminalProps>(
               const command = cleanTerminalContext(String(msg.command || ""))
                 .replace(/\r?\n/g, " ")
                 .trim();
-              terminal.write(
-                `\r\n\u001b[35m[Agent]\u001b[0m $ ${command}\r\n`,
-              );
+              terminal.write(`\r\n\u001b[35m[Agent]\u001b[0m $ ${command}\r\n`);
             } else if (phase === "stdout" || phase === "stderr") {
               terminal.write(String(msg.data || ""));
             } else if (phase === "end") {
               const status = cleanTerminalContext(String(msg.status || "done"));
               const exitCode =
-                typeof msg.exitCode === "number" ? ` · exit ${msg.exitCode}` : "";
+                typeof msg.exitCode === "number"
+                  ? ` · exit ${msg.exitCode}`
+                  : "";
               terminal.write(
                 `\r\n\u001b[35m[Agent]\u001b[0m ${status}${exitCode}\r\n`,
               );
