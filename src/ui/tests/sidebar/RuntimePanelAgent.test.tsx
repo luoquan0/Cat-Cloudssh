@@ -214,7 +214,9 @@ describe("runtime-backed existing Agent view", () => {
     await ready();
 
     expect(api.active).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "panelAgent.send" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "panelAgent.send" }),
+    ).toBeTruthy();
   });
 
   it("reuses the exact request ID and user message after a lost acknowledgement", async () => {
