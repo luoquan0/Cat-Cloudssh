@@ -284,28 +284,25 @@ describe("shared terminal execution", () => {
       { sessionId },
     );
     const session = sessionManager.getSession(sessionId)!;
-    class SharedChannel extends Duplex {
+    class SharedChannel extends EventEmitter {
       stderr = new PassThrough();
+      destroyed = false;
       writes: string[] = [];
-      _read() {}
-      _write(
-        chunk: Buffer,
-        _encoding: BufferEncoding,
-        callback: (error?: Error | null) => void,
-      ) {
-        const text = chunk.toString("utf8");
+      write(chunk: Buffer | string) {
+        const text = Buffer.isBuffer(chunk) ? chunk.toString("utf8") : chunk;
         this.writes.push(text);
-        callback();
-        if (text === "\u0003") return;
+        if (text === "\u0003") return true;
         const token = text.match(/cloudssh-agent-begin=([0-9a-f]+)/)?.[1];
-        if (!token) return;
+        if (!token) return true;
         setTimeout(() => {
-          this.push(
+          this.emit(
+            "data",
             Buffer.from(
               `\u001b]777;cloudssh-agent-begin=${token}\u0007shared output\r\n\u001b]777;cloudssh-agent-end=${token};status=0\u0007`,
             ),
           );
         }, 2);
+        return true;
       }
     }
     const channel = new SharedChannel();
