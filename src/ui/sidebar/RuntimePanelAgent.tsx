@@ -733,7 +733,9 @@ export function RuntimePanelAgent(props: {
             disabled={busy}
             onClick={() =>
               void interact(async () => {
-                if (!window.confirm("清空这个浏览器里的全部旧 Agent 对话缓存？"))
+                if (
+                  !window.confirm("清空这个浏览器里的全部旧 Agent 对话缓存？")
+                )
                   return;
                 const viewingLegacy = legacySelection.current !== null;
                 clearLegacyChats();

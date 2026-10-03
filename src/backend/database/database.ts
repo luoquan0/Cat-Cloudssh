@@ -274,9 +274,7 @@ interface GitHubRepositoryFile {
   sha?: string;
 }
 
-async function getRepositoryMainVersion(
-  forceRefresh = false,
-): Promise<{
+async function getRepositoryMainVersion(forceRefresh = false): Promise<{
   version: string;
   htmlUrl: string | null;
   revision: string | null;

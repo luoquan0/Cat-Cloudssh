@@ -40,9 +40,7 @@ export interface UpdateRouteDependencies {
   getLatestRelease: (options?: {
     forceRefresh?: boolean;
   }) => Promise<GitHubRelease>;
-  getRepositoryVersion?: (options?: {
-    forceRefresh?: boolean;
-  }) => Promise<{
+  getRepositoryVersion?: (options?: { forceRefresh?: boolean }) => Promise<{
     version: string;
     htmlUrl: string | null;
     revision: string | null;
@@ -288,8 +286,7 @@ export function createUpdateRoutes(
     } catch (releaseError) {
       apiLogger.info("No usable CloudSSH Release metadata; checking main", {
         operation: "cloudssh_update_status_repository_fallback",
-        error:
-          releaseError instanceof Error ? releaseError.message : "unknown",
+        error: releaseError instanceof Error ? releaseError.message : "unknown",
       });
 
       if (dependencies.getRepositoryVersion) {

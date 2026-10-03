@@ -708,9 +708,7 @@ describe("PanelAgentPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "回到最新消息" }));
     expect(scrollMetrics.current()).toBe(1600);
-    expect(
-      screen.queryByRole("button", { name: "回到最新消息" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "回到最新消息" })).toBeNull();
   });
 
   it("scrolls the latest chat content into view", async () => {
