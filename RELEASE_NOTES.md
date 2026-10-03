@@ -49,6 +49,7 @@ https://youtu.be/g0QjNdV3YYY
 
 <!-- BUG_FIXES -->
 
+- Fixed opening a new Panel Agent conversation repeatedly replaying the same conversation action after the inner chat panel remounted, which caused React error #185 (maximum update depth exceeded).
 - Fixed Panel Agent tasks failing on HTTP, older browsers, or embedded WebViews where `crypto.randomUUID()` is unavailable; runtime IDs now use a compatible fallback path.
 - Fixed the floating Agent window repeatedly reattaching a state-writing measurement ref during rerenders, which could trigger React error #185 (maximum update depth exceeded).
 - Fixed macOS Agent login failing to save the generated Ed25519 device private key in Keychain by storing a short PKCS#8 DER base64 value, preserving old PEM reads, and verifying the write to catch truncation.
