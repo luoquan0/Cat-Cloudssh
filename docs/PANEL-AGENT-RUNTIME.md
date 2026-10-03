@@ -1,4 +1,8 @@
-# Panel Agent runtime - 2.6.0-cloudssh.59
+# Panel Agent runtime - 2.6.0-cloudssh.60
+
+## .60 user-message ID compatibility hotfix
+
+This hotfix fixes Panel Agent sends in browsers and embedded WebViews where `crypto.randomUUID()` is unavailable. User message IDs now use the same UUID-compatible random-byte fallback as runtime request IDs, with a backend-safe alphanumeric fallback when neither API exists. Backend validation now reports invalid message IDs, non-user roles, and forbidden client tool calls separately so an ID-format failure is no longer shown as “只能提交用户消息”.
 
 ## .59 new-chat replay hotfix
 

@@ -3,7 +3,7 @@ name: Agent runtime checks
 on:
   push:
     branches:
-      - feat/backend-agent-runtime-57-ready
+      - main
   pull_request:
     branches:
       - main

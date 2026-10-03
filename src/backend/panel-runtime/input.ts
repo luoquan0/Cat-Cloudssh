@@ -70,13 +70,22 @@ function attachment(raw: unknown): RuntimeAttachment {
 function userMessage(raw: unknown): RuntimeMessage {
   const v = object(raw);
   requireValue(
-    validId(v.id) &&
-      v.role === "user" &&
-      v.toolCalls === undefined &&
-      v.toolCallId === undefined,
+    validId(v.id),
+    400,
+    "INVALID_MESSAGE_ID",
+    "消息标识无效，请刷新页面后重试",
+  );
+  requireValue(
+    v.role === "user",
     400,
     "USER_MESSAGE_REQUIRED",
-    "只能提交用户消息；工具调用由后端生成",
+    "只能提交用户消息",
+  );
+  requireValue(
+    v.toolCalls === undefined && v.toolCallId === undefined,
+    400,
+    "CLIENT_TOOL_CALL_FORBIDDEN",
+    "工具调用只能由后端生成",
   );
   const attachments = v.attachments;
   requireValue(

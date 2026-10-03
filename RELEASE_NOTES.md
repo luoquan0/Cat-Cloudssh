@@ -49,6 +49,7 @@ https://youtu.be/g0QjNdV3YYY
 
 <!-- BUG_FIXES -->
 
+- Fixed Panel Agent messages failing to send in browsers or embedded WebViews without `crypto.randomUUID()` because the legacy message-ID fallback contained characters rejected by the backend; user message IDs now use a backend-safe fallback and validation errors identify the actual failure.
 - Fixed opening a new Panel Agent conversation repeatedly replaying the same conversation action after the inner chat panel remounted, which caused React error #185 (maximum update depth exceeded).
 - Fixed Panel Agent tasks failing on HTTP, older browsers, or embedded WebViews where `crypto.randomUUID()` is unavailable; runtime IDs now use a compatible fallback path.
 - Fixed the floating Agent window repeatedly reattaching a state-writing measurement ref during rerenders, which could trigger React error #185 (maximum update depth exceeded).

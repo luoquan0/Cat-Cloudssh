@@ -31,6 +31,7 @@ vi.mock("sonner", () => ({
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
+import { createMessageId } from "@/sidebar/PanelAgentPanel";
 import {
   createRuntimeClientId,
   RuntimePanelAgent,
@@ -157,6 +158,23 @@ describe("runtime-backed existing Agent view", () => {
     expect(id).toMatch(
       /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/,
     );
+  });
+
+  it("creates backend-safe user message IDs when randomUUID is unavailable", () => {
+    let seed = 0;
+    const id = createMessageId({
+      getRandomValues: ((array: Uint8Array) => {
+        for (let index = 0; index < array.length; index += 1) {
+          array[index] = (seed++ * 29 + 7) & 0xff;
+        }
+        return array;
+      }) as Crypto["getRandomValues"],
+    } as Pick<Crypto, "randomUUID" | "getRandomValues">);
+
+    expect(id).toMatch(
+      /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/,
+    );
+    expect(id).toMatch(/^[a-zA-Z0-9_-]{8,128}$/);
   });
 
   it("sends only a user task to the backend, never types commands or reads the human terminal", async () => {
