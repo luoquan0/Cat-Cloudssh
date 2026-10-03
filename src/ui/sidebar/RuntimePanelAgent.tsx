@@ -401,6 +401,9 @@ export function RuntimePanelAgent(props: {
           targetId: target.targetId,
           hostId: Number(target.hostId),
           hostName: target.hostName,
+          ...(target.sessionId
+            ? { terminalSessionId: target.sessionId }
+            : {}),
         })),
         options,
         ...(history

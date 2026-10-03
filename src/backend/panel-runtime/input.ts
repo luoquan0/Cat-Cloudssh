@@ -139,6 +139,13 @@ export function parseStartRuntime(raw: unknown): StartRuntimeInput {
         ? undefined
         : naturalNumber(target.projectHostId);
     const targetId = text(target.targetId, 128);
+    const terminalSessionId = target.terminalSessionId;
+    requireValue(
+      terminalSessionId === undefined || validId(terminalSessionId),
+      400,
+      "INVALID_TERMINAL_SESSION",
+      "所选终端会话标识无效",
+    );
     requireValue(
       targetId.length > 0 &&
         hostId > 0 &&
@@ -152,6 +159,7 @@ export function parseStartRuntime(raw: unknown): StartRuntimeInput {
       hostId,
       hostName: text(target.hostName, 200, true),
       ...(projectHostId === undefined ? {} : { projectHostId }),
+      ...(terminalSessionId === undefined ? {} : { terminalSessionId }),
     };
   });
   requireValue(
@@ -179,11 +187,27 @@ export function parseStartRuntime(raw: unknown): StartRuntimeInput {
     "INVALID_SKILLS",
     "技能设置无效",
   );
+  const sshMode = optionsValue.sshMode;
+  requireValue(
+    sshMode === undefined ||
+      ["isolated", "mirror", "shared-terminal"].includes(String(sshMode)),
+    400,
+    "INVALID_SSH_MODE",
+    "SSH 执行方式无效",
+  );
   const options: RuntimeOptions = {
     model: text(optionsValue.model, 160, true) || undefined,
     reasoningEffort: effort as RuntimeOptions["reasoningEffort"],
     skillIds: ids as string[] | undefined,
+    sshMode: sshMode as RuntimeOptions["sshMode"],
   };
+  requireValue(
+    options.sshMode !== "shared-terminal" ||
+      (targets.length === 1 && Boolean(targets[0]?.terminalSessionId)),
+    400,
+    "SHARED_TERMINAL_REQUIRED",
+    "共享当前 SSH 需要选择一个已连接终端",
+  );
   // Legacy import is explicit and textual. Historical tool records are never
   // installed as pending executable calls or trusted authorization metadata.
   requireValue(

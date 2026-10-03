@@ -55,6 +55,8 @@ export interface TerminalSession {
 
   participants: Map<string, SessionParticipant>;
   writeLeaseParticipantId: string | null;
+  /** Panel Agent 对同一交互式 PTY 的独占写入租约。 */
+  agentRuntimeLeaseId: string | null;
   lastDetachedAt: number | null;
   retentionExpiresAt: number | null;
   detachTimeout: NodeJS.Timeout | null;
@@ -358,6 +360,7 @@ class TerminalSessionManager {
       createdAt: now,
       participants: new Map(),
       writeLeaseParticipantId: null,
+      agentRuntimeLeaseId: null,
       lastDetachedAt: null,
       retentionExpiresAt: null,
       detachTimeout: null,
@@ -849,12 +852,71 @@ class TerminalSessionManager {
     }
   }
 
+  acquireAgentRuntimeLease(
+    sessionId: string,
+    userId: string,
+    hostId: number,
+    leaseId: string,
+  ): TerminalSession {
+    const session = this.sessions.get(sessionId);
+    if (
+      !session ||
+      session.userId !== userId ||
+      session.hostId !== hostId ||
+      !session.isConnected ||
+      !session.sshStream ||
+      session.sshStream.destroyed
+    ) {
+      throw Object.assign(new Error("所选共享 SSH 会话已断开或不匹配"), {
+        code: "TERMINAL_SESSION_UNAVAILABLE",
+      });
+    }
+    if (session.agentSessionId) {
+      throw Object.assign(new Error("Agent 持续会话不能作为 Panel Agent 共享终端"), {
+        code: "TERMINAL_SESSION_AGENT_CONTROLLED",
+      });
+    }
+    if (session.pinTransitionActive || session.expirationInProgress) {
+      throw Object.assign(new Error("终端正在切换状态，请稍后重试"), {
+        code: "TERMINAL_SESSION_TRANSITION",
+      });
+    }
+    if (
+      session.agentRuntimeLeaseId &&
+      session.agentRuntimeLeaseId !== leaseId
+    ) {
+      throw Object.assign(new Error("该终端正在由另一个 Agent 任务使用"), {
+        code: "TERMINAL_SESSION_BUSY",
+      });
+    }
+    session.agentRuntimeLeaseId = leaseId;
+    this.broadcast(session.id, {
+      type: "agentControlState",
+      active: true,
+      leaseId,
+    });
+    return session;
+  }
+
+  releaseAgentRuntimeLease(sessionId: string, leaseId: string): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.agentRuntimeLeaseId !== leaseId) return false;
+    session.agentRuntimeLeaseId = null;
+    this.broadcast(session.id, {
+      type: "agentControlState",
+      active: false,
+      leaseId,
+    });
+    return true;
+  }
+
   canWriteToSession(sessionId: string, ws: WebSocket): boolean {
     const session = this.sessions.get(sessionId);
     if (
       !session ||
       session.pinTransitionActive ||
-      session.expirationInProgress
+      session.expirationInProgress ||
+      session.agentRuntimeLeaseId
     ) {
       return false;
     }
@@ -1030,6 +1092,19 @@ class TerminalSessionManager {
     this.reconcileWriteLease(session);
     session.attachedTabInstanceId = tabInstanceId;
     this.touchOpenTab(session);
+    if (session.agentRuntimeLeaseId) {
+      try {
+        ws.send(
+          JSON.stringify({
+            type: "agentControlState",
+            active: true,
+            leaseId: session.agentRuntimeLeaseId,
+          }),
+        );
+      } catch {
+        /* The normal attachment lifecycle will handle a socket that closed here. */
+      }
+    }
 
     if (session.managedTmux) {
       session.retentionExpiresAt = null;

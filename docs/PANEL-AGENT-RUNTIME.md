@@ -1,4 +1,10 @@
-# Panel Agent runtime - 2.6.0-cloudssh.60
+# Panel Agent runtime - 2.6.0-cloudssh.61
+
+## .61 terminal execution modes
+
+Panel Agent now offers three SSH execution modes. **Independent + mirror** is the default: commands still run in isolated backend non-PTY SSH jobs, while command/output traces are displayed in the selected live browser terminal without being sent back as terminal input. **Shared selected terminal SSH** uses one selected live terminal's existing PTY, inheriting its cwd and shell environment; the backend acquires an exclusive Agent write lease so human input is blocked server-side while an Agent command is active. **Fully isolated** keeps the previous backend-only behavior without terminal mirroring.
+
+Shared-terminal execution is intentionally limited to one selected connected terminal. It rechecks host authorization, binds the requested terminal session to the same owner and host, persists the tool intent before execution, captures command evidence into the normal bounded job spool, and releases the write lease on success, failure, timeout, cancellation, or disconnect. The shell wrapper uses invisible completion markers to recover a real exit status without replaying the command in a second SSH connection. Interactive editors, pagers, password prompts, and full-screen programs remain unsupported for Agent tool calls.
 
 ## .60 user-message ID compatibility hotfix
 

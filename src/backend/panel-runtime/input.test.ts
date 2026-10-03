@@ -23,6 +23,41 @@ describe("panel runtime input validation", () => {
     ).toThrow("消息标识无效，请刷新页面后重试");
   });
 
+  it("accepts shared-terminal mode only with one live terminal session id", () => {
+    const parsed = parseStartRuntime({
+      requestId: "request_12345678",
+      message: {
+        id: "message_12345678",
+        role: "user",
+        content: "pwd",
+      },
+      targets: [
+        {
+          targetId: "tab-12345678",
+          hostId: 42,
+          hostName: "test",
+          terminalSessionId: "terminal-session-123",
+        },
+      ],
+      options: { sshMode: "shared-terminal" },
+    });
+    expect(parsed.options.sshMode).toBe("shared-terminal");
+    expect(parsed.targets[0].terminalSessionId).toBe("terminal-session-123");
+
+    expect(() =>
+      parseStartRuntime({
+        requestId: "request_87654321",
+        message: {
+          id: "message_87654321",
+          role: "user",
+          content: "pwd",
+        },
+        targets: [{ targetId: "tab-87654321", hostId: 42, hostName: "test" }],
+        options: { sshMode: "shared-terminal" },
+      }),
+    ).toThrow("共享当前 SSH 需要选择一个已连接终端");
+  });
+
   it("rejects client-supplied tool calls with a dedicated error", () => {
     expect(() =>
       parseStartRuntime(
