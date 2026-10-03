@@ -324,27 +324,29 @@ describe("shared terminal execution", () => {
 
     const connect = vi.fn();
     const jobs = new RuntimeJobs(store, async () => {}, await spool(), connect);
-    const result = await jobs.start(
+    const started = await jobs.start(
       "alice",
       run,
       call,
       new AbortController().signal,
     );
 
-    expect(result.status).toBe("completed");
-    expect(result.exitCode).toBe(0);
     expect(connect).not.toHaveBeenCalled();
     expect(channel.writes.join("")).toContain("eval 'pwd'");
-    expect(session.agentRuntimeLeaseId).toBeNull();
 
     const output = await jobs.read(
       "alice",
       run,
-      result.id,
-      {},
+      started.id,
+      { waitSeconds: 2 },
       2048,
       new AbortController().signal,
     );
-    expect(output.stdout).toContain("shared output");
+    expect(output).toMatchObject({
+      status: "completed",
+      exitCode: 0,
+      stdout: expect.stringContaining("shared output"),
+    });
+    expect(session.agentRuntimeLeaseId).toBeNull();
   });
 });
