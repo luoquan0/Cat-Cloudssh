@@ -46,6 +46,21 @@ describe("CloudSSH 正式发版工作流", () => {
     expect(workflow).toContain('gh release verify "$TAG"');
   });
 
+  it("快速镜像构建成功后自动发布正式 Release", async () => {
+    const workflow = await readFile(
+      ".github/workflows/cloudssh-release.yml",
+      "utf8",
+    );
+    expect(workflow).toContain("workflow_run:");
+    expect(workflow).toContain("CloudSSH 快速镜像构建");
+    expect(workflow).toContain("github.event.workflow_run.conclusion == 'success'");
+    expect(workflow).toContain("github.event.workflow_run.head_branch == 'main'");
+    expect(workflow).toContain("github.event.workflow_run.head_sha");
+    expect(workflow).toContain("TARGET_REVISION");
+    expect(workflow).toContain("检出提交 $REVISION 与触发编译提交 $TARGET_REVISION 不一致");
+    expect(workflow).toContain("required: false");
+  });
+
   it("发布与在线更新只信任 Cat-Cloudssh 当前仓库", async () => {
     const [releaseWorkflow, exportWorkflow, selfUpdater, hostUpdater] =
       await Promise.all([

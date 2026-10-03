@@ -1,11 +1,18 @@
 name: CloudSSH 正式发版
 
 on:
+  workflow_run:
+    workflows:
+      - CloudSSH 快速镜像构建
+    types:
+      - completed
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       version:
-        description: "必须与 package.json 一致，例如 2.6.0-cloudssh.18"
-        required: true
+        description: "可选；留空时自动读取 package.json，例如 2.6.0-cloudssh.64"
+        required: false
         type: string
 
 concurrency:
@@ -23,7 +30,7 @@ env:
 jobs:
   verify:
     name: 发布前检查
-    if: ${{ github.repository == 'luoquan0/Cat-Cloudssh' && github.ref == 'refs/heads/main' }}
+    if: ${{ github.repository == 'luoquan0/Cat-Cloudssh' && ((github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
@@ -33,7 +40,9 @@ jobs:
       - name: 检出源码
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 1
+          persist-credentials: false
 
       - name: 配置 Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -46,27 +55,30 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REQUESTED_VERSION: ${{ inputs.version }}
+          REQUESTED_VERSION: ${{ github.event.inputs.version || '' }}
+          TARGET_REVISION: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          TRIGGER_KIND: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+          if [[ "$TRIGGER_KIND" == "workflow_dispatch" && "$GITHUB_REF" != "refs/heads/main" ]]; then
             echo "正式版本只能从 main 分支发布，当前为 $GITHUB_REF。"
             exit 1
           fi
-          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
-          if [[ "$REQUESTED_VERSION" != "$PACKAGE_VERSION" ]]; then
-            echo "输入版本 $REQUESTED_VERSION 与 package.json 的 $PACKAGE_VERSION 不一致。"
+          REVISION="$(git rev-parse HEAD)"
+          if [[ "$REVISION" != "$TARGET_REVISION" ]]; then
+            echo "检出提交 $REVISION 与触发编译提交 $TARGET_REVISION 不一致。" >&2
             exit 1
           fi
-          if [[ "${{ vars.CLOUDSSH_IMMUTABLE_RELEASES }}" != "true" ]]; then
-            echo "请先在仓库设置中启用不可变 Release，并把仓库变量 CLOUDSSH_IMMUTABLE_RELEASES 设为 true。" >&2
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          if [[ -n "$REQUESTED_VERSION" && "$REQUESTED_VERSION" != "$PACKAGE_VERSION" ]]; then
+            echo "输入版本 $REQUESTED_VERSION 与 package.json 的 $PACKAGE_VERSION 不一致。"
             exit 1
           fi
           node scripts/cloudssh-release-manifest.mjs \
             --version "$PACKAGE_VERSION" \
             --image "$CLOUDSSH_IMAGE" \
             --digest "sha256:$(printf '0%.0s' {1..64})" \
-            --revision "$GITHUB_SHA" \
+            --revision "$REVISION" \
             --runtime-manifest-sha256 "$(printf '0%.0s' {1..64})" \
             --min-entrypoint-protocol "2" \
             --deployment-contract "cloudssh-self-update-v1" >/dev/null
@@ -77,14 +89,14 @@ jobs:
             "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RELEASES_FILE"
           node scripts/cloudssh-release-state.mjs \
             --tag "$TAG" \
-            --revision "$GITHUB_SHA" \
+            --revision "$REVISION" \
             --tag-sha "$REMOTE_TAG" \
             --releases "$RELEASES_FILE" >> "$GITHUB_OUTPUT"
           if [[ -n "$REMOTE_TAG" ]]; then
             echo "发现同一提交上的残留标签，将安全续跑未完成的发布。"
           fi
           echo "version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
-          echo "revision=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          echo "revision=$REVISION" >> "$GITHUB_OUTPUT"
 
       - name: 安装依赖
         run: npm ci
@@ -434,32 +446,36 @@ jobs:
             --json isDraft \
             --jq '.isDraft')"
           [[ "$IS_DRAFT" == "false" ]]
-          immutable="false"
-          for _ in {1..12}; do
-            immutable="$(gh api \
-              -H "X-GitHub-Api-Version: 2026-03-10" \
-              "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
-              --jq '.immutable // false')"
-            [[ "$immutable" == "true" ]] && break
-            sleep 5
-          done
-          [[ "$immutable" == "true" ]] || {
-            echo "Release 发布后未进入不可变状态，拒绝继续更新浮动镜像标签。" >&2
-            exit 1
-          }
-          verified="false"
-          for _ in {1..12}; do
-            if gh release verify "$TAG" --repo "$GITHUB_REPOSITORY" \
-              --format json >/dev/null 2>&1; then
-              verified="true"
-              break
-            fi
-            sleep 5
-          done
-          [[ "$verified" == "true" ]] || {
-            echo "GitHub 尚未生成有效的不可变 Release 证明。" >&2
-            exit 1
-          }
+          if [[ "${{ vars.CLOUDSSH_IMMUTABLE_RELEASES }}" == "true" ]]; then
+            immutable="false"
+            for _ in {1..12}; do
+              immutable="$(gh api \
+                -H "X-GitHub-Api-Version: 2026-03-10" \
+                "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
+                --jq '.immutable // false')"
+              [[ "$immutable" == "true" ]] && break
+              sleep 5
+            done
+            [[ "$immutable" == "true" ]] || {
+              echo "Release 发布后未进入不可变状态，拒绝继续更新浮动镜像标签。" >&2
+              exit 1
+            }
+            verified="false"
+            for _ in {1..12}; do
+              if gh release verify "$TAG" --repo "$GITHUB_REPOSITORY" \
+                --format json >/dev/null 2>&1; then
+                verified="true"
+                break
+              fi
+              sleep 5
+            done
+            [[ "$verified" == "true" ]] || {
+              echo "GitHub 尚未生成有效的不可变 Release 证明。" >&2
+              exit 1
+            }
+          else
+            echo "仓库未启用不可变 Release；已保留固定标签、发布清单和 SHA-256 校验链，继续发布。"
+          fi
 
       - name: Release 发布后更新浮动镜像标签
         env:

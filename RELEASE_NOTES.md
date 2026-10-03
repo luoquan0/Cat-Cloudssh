@@ -12,6 +12,9 @@ https://youtu.be/g0QjNdV3YYY
 
 <!-- UPDATE_LOG -->
 
+- Added automatic formal releases after a successful CloudSSH fast-image build: the exact successful main commit is checked out, fully tested and rebuilt, release assets and SHA-256 manifests are generated, and a latest GitHub Release is published so the in-app updater can install it directly.
+- Improved long Agent chats with bounded independent scrolling, manual scroll position preservation, and a "回到最新消息" control instead of forcing every new message to the bottom.
+- Added deletion and one-click clearing for legacy browser-only Agent conversation caches stored in localStorage.
 - Added an optional persisted Panel Agent automatic-execution mode. When enabled before sending a runtime task, commands that normally require approval run without per-command confirmation while host authorization, target scoping, timeouts, concurrency limits, write leases, persistence, cancellation, and loop protection remain enforced.
 - Added repository fallback version checks: when no formal GitHub Release exists, the admin update panel reads the fixed Cat-Cloudssh main branch version, clearly marks it as non-installable, and keeps one-click updating disabled until verified Release artifacts exist.
 - Added three Panel Agent SSH execution modes: independent execution with read-only terminal mirroring (default), a single-target shared live SSH/PTTY mode with an exclusive server-side Agent write lease, and fully isolated backend execution.

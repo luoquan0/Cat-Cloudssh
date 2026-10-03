@@ -1,4 +1,10 @@
-# Panel Agent runtime - 2.6.0-cloudssh.63
+# Panel Agent runtime - 2.6.0-cloudssh.64
+
+## .64 legacy cache cleanup and long-chat scrolling
+
+Legacy browser-only Agent conversations now have real deletion controls in runtime history: individual cached conversations can be removed from localStorage and all legacy Agent cache can be cleared at once. Deletion updates the visible history immediately and never deletes backend-owned runtime threads by accident.
+
+Long chats now keep the composer and toolbar fixed while only the message list scrolls. Automatic follow-to-bottom is conditional: when the user manually scrolls upward, new model/tool messages no longer force the view back to the bottom. A **回到最新消息** control restores bottom-follow mode. Compact/floating Agent layouts always clip the chat section so message content cannot expand the panel beyond its available height.
 
 ## .63 optional automatic execution
 

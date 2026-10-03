@@ -79,7 +79,7 @@ GitHub Release；如果仓库尚未创建任何 Release，则自动回退读取�
 {
   "schemaVersion": 3,
   "channel": "stable",
-  "version": "2.6.0-cloudssh.63",
+  "version": "2.6.0-cloudssh.64",
   "image": "ghcr.io/luoquan0/cloudssh",
   "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "revision": "0123456789abcdef0123456789abcdef01234567",
@@ -102,10 +102,11 @@ GitHub Release；如果仓库尚未创建任何 Release，则自动回退读取�
 不可向后兼容的数据库迁移时，必须改用镜像更新并先完成隔离恢复演练。
 
 客户端当前信任边界是固定的 `luoquan0/Cat-Cloudssh` 仓库、GitHub HTTPS、
-不可变 Release 与清单摘要链。正式发版前必须在仓库设置中启用不可变 Release，
-并把仓库变量 `CLOUDSSH_IMMUTABLE_RELEASES` 设为 `true`；流水线发布后会再次读取
-Release 的 `immutable` 状态并校验证明。仓库发布权限失陷仍属于信任边界，不能把
-SHA-256 描述成独立的发布者签名。
+固定版本标签与清单摘要链。若仓库启用了不可变 Release，并把仓库变量
+`CLOUDSSH_IMMUTABLE_RELEASES` 设为 `true`，流水线会在发布后继续校验
+`immutable` 状态和 GitHub Release 证明；未启用时不会阻塞正式 Release，但仍要求
+版本标签不可覆盖、附件回读一致以及 SHA-256 清单链完整。仓库发布权限失陷仍属于
+信任边界，不能把 SHA-256 描述成独立的发布者签名。
 
 ## 生产快速重启更新
 
@@ -121,7 +122,7 @@ cd /opt/cloudssh
 sh scripts/cloudssh-host-image-update.sh
 
 # 固定升级到指定正式版本
-sh scripts/cloudssh-host-image-update.sh 2.6.0-cloudssh.63
+sh scripts/cloudssh-host-image-update.sh 2.6.0-cloudssh.64
 ```
 
 脚本需要 `curl`、`docker`、`gzip` 与 `sha256sum`（或 `shasum`），并且要求当前镜像仍在本机，
@@ -129,8 +130,11 @@ sh scripts/cloudssh-host-image-update.sh 2.6.0-cloudssh.63
 Docker Socket。
 镜像更新器会先读取当前容器的真实 `/app/data` 与录像 Docker 命名卷，后续备份、重建和回滚都强制复用这两个卷；新容器健康前还会再次核对挂载卷名，不一致时拒绝确认，避免因 `.env`、Compose 目录或默认卷名变化误挂空卷造成“数据丢失”假象。
 日常推送到 `main` 时，`.github/workflows/cloudssh-docker.yml` 会用缓存优先的多架构 Buildx
-直接推送 `ghcr.io/luoquan0/cloudssh` 镜像；正式 Release 仍由 `cloudssh-release.yml`
-保留严格的离线包、校验和不可变 Release 链路。
+直接推送 `ghcr.io/luoquan0/cloudssh` 镜像。该快速镜像工作流成功后，
+`.github/workflows/cloudssh-release.yml` 会自动接管同一个提交，重新执行完整测试和构建
+校验，再生成运行包、离线镜像、发布清单和 SHA-256，并创建 latest 正式 GitHub Release。
+因此管理面板会优先发现可安装的 Release；只有正式 Release 尚未生成时才回退显示
+`main/package.json` 的不可安装仓库版本。
 
 `auto` 与 `binary` 仍保留为无宿主机权限时的容器内运行包更新。生产机采用本节路径时，
 请把面板更新方式设为 `image`，避免随后选择较慢的运行包。运行包回退只切换程序，不会

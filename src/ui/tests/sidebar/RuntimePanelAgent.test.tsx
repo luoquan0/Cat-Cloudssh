@@ -259,6 +259,35 @@ describe("runtime-backed existing Agent view", () => {
     expect(api.start.mock.calls[1][0]).toEqual(first);
     expect(sessionStorage.getItem("cloudssh.panelRuntime.pending")).toBeNull();
   });
+  it("deletes legacy browser conversations from localStorage", async () => {
+    localStorage.setItem(
+      "panelAgentConversationHistory",
+      JSON.stringify([
+        {
+          id: "legacy-a",
+          title: "缓存对话",
+          messages: [{ role: "user", content: "旧缓存内容" }],
+        },
+      ]),
+    );
+
+    render(
+      <RuntimePanelAgent
+        terminalTabs={[]}
+        activeTabId=""
+        conversationAction={{ id: 7001, type: "history" }}
+      />,
+    );
+
+    expect(await screen.findByText("缓存对话")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+
+    await waitFor(() =>
+      expect(localStorage.getItem("panelAgentConversationHistory")).toBeNull(),
+    );
+    expect(screen.queryByText("缓存对话")).toBeNull();
+  });
+
   it("does not automatically select another server when restoring a historical run", async () => {
     snapshot.run = {
       ...makeRun(),

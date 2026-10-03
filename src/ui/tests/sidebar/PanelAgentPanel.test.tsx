@@ -690,6 +690,29 @@ describe("PanelAgentPanel", () => {
     expect(composer.className).toContain("shrink-0");
   });
 
+  it("lets the user scroll long conversations without being pinned to the bottom", async () => {
+    render(<PanelAgentPanel terminalTabs={[]} activeTabId="" />);
+
+    await screen.findByPlaceholderText("panelAgent.chatPlaceholder");
+    const messageList = screen.getByTestId("panel-agent-message-list");
+    const scrollMetrics = mockScrollMetrics(messageList);
+
+    messageList.scrollTop = 300;
+    fireEvent.scroll(messageList);
+
+    expect(
+      await screen.findByRole("button", { name: "回到最新消息" }),
+    ).toBeTruthy();
+    expect(messageList.className).toContain("overflow-y-auto");
+    expect(messageList.className).toContain("overflow-x-hidden");
+
+    fireEvent.click(screen.getByRole("button", { name: "回到最新消息" }));
+    expect(scrollMetrics.current()).toBe(1600);
+    expect(
+      screen.queryByRole("button", { name: "回到最新消息" }),
+    ).toBeNull();
+  });
+
   it("scrolls the latest chat content into view", async () => {
     panelAgentApi.sendPanelAgentChat.mockResolvedValue({
       message: { role: "assistant", content: "bottom reply", toolCalls: [] },

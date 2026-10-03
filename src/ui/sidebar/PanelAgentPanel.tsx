@@ -813,6 +813,8 @@ export function PanelAgentPanel({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const latestMessageRef = useRef<HTMLDivElement | null>(null);
+  const stickToBottomRef = useRef(true);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const lastConversationActionRef = useRef<number | null>(null);
   const conversationActionHandlersRef = useRef<
     Record<PanelAgentConversationAction["type"], () => void>
@@ -896,6 +898,8 @@ export function PanelAgentPanel({
 
   const scrollLatestMessageIntoView = useCallback(() => {
     const messageList = messageListRef.current;
+    stickToBottomRef.current = true;
+    setShowJumpToLatest(false);
     if (messageList) {
       messageList.scrollTop = messageList.scrollHeight;
       return;
@@ -906,8 +910,20 @@ export function PanelAgentPanel({
     }
   }, []);
 
+  function handleMessageListScroll() {
+    const messageList = messageListRef.current;
+    if (!messageList) return;
+    const remaining =
+      messageList.scrollHeight -
+      messageList.scrollTop -
+      messageList.clientHeight;
+    const atBottom = remaining <= 72;
+    stickToBottomRef.current = atBottom;
+    setShowJumpToLatest(!atBottom);
+  }
+
   useEffect(() => {
-    if (historyOpen) return;
+    if (historyOpen || !stickToBottomRef.current) return;
     const firstFrame = window.requestAnimationFrame(
       scrollLatestMessageIntoView,
     );
@@ -1222,6 +1238,8 @@ export function PanelAgentPanel({
       attachments: attachments.length > 0 ? attachments : undefined,
     };
     const nextMessages = [...messages, userMessage];
+    stickToBottomRef.current = true;
+    setShowJumpToLatest(false);
     setDraft("");
     setAttachments([]);
     setHistoryOpen(false);
@@ -1899,7 +1917,7 @@ export function PanelAgentPanel({
         className={`flex min-h-0 flex-1 flex-col overflow-hidden ${compact ? "gap-2 px-3 pb-3 pt-2" : "gap-3 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.08),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.08),transparent_30%)] p-3"}`}
       >
         <section
-          className={`relative flex min-h-0 flex-1 flex-col gap-2 ${compact ? "border-0 bg-transparent p-0" : "overflow-hidden rounded-3xl border border-border/60 bg-card/75 p-3 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur-xl"}`}
+          className={`relative flex min-h-0 flex-1 flex-col gap-2 overflow-hidden ${compact ? "border-0 bg-transparent p-0" : "rounded-3xl border border-border/60 bg-card/75 p-3 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur-xl"}`}
           style={
             !compact
               ? {
@@ -2006,8 +2024,14 @@ export function PanelAgentPanel({
           <div
             data-testid="panel-agent-message-list"
             ref={messageListRef}
-            className={`min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1 touch-pan-y [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] ${compact ? "rounded-xl" : "rounded-2xl border border-border/40 bg-background/35 p-2"}`}
-            style={{ overflowY: "auto", overscrollBehavior: "contain" }}
+            onScroll={handleMessageListScroll}
+            className={`min-h-0 max-h-full flex-1 space-y-2 overflow-x-hidden overflow-y-auto overscroll-contain pr-1 touch-pan-y [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] ${compact ? "rounded-xl" : "rounded-2xl border border-border/40 bg-background/35 p-2"}`}
+            style={{
+              overflowY: "auto",
+              overflowX: "hidden",
+              overscrollBehavior: "contain",
+              WebkitOverflowScrolling: "touch",
+            }}
           >
             {messages.length === 0 && !historyOpen ? (
               compact ? (
@@ -2121,6 +2145,19 @@ export function PanelAgentPanel({
                   }
             }
           >
+            {showJumpToLatest && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8 shrink-0 rounded-full bg-background/40 text-muted-foreground"
+                onClick={scrollLatestMessageIntoView}
+                aria-label="回到最新消息"
+                title="回到最新消息"
+              >
+                <ChevronDown className="size-4" />
+              </Button>
+            )}
             <Button
               type="button"
               variant="ghost"

@@ -79,11 +79,33 @@ export function createRuntimeClientId(
   ].join("-");
 }
 
-function legacyChats(): {
+type LegacyChat = {
   id: string;
   title: string;
   messages: RuntimeUiMessage[];
-}[] {
+  source: "live" | "history";
+  historyIndex?: number;
+};
+
+function legacyMessages(messages: unknown): RuntimeUiMessage[] {
+  if (!Array.isArray(messages)) return [];
+  return messages
+    .filter(
+      (message) =>
+        message &&
+        typeof message === "object" &&
+        ["user", "assistant", "tool"].includes(
+          String((message as RuntimeUiMessage).role),
+        ) &&
+        typeof (message as RuntimeUiMessage).content === "string",
+    )
+    .map((message) => ({
+      ...(message as RuntimeUiMessage),
+      id: createRuntimeClientId(),
+    }));
+}
+
+function legacyChats(): LegacyChat[] {
   try {
     const history = JSON.parse(
       localStorage.getItem("panelAgentConversationHistory") || "[]",
@@ -91,44 +113,69 @@ function legacyChats(): {
     const live = JSON.parse(
       localStorage.getItem("panelAgentLiveConversation") || "null",
     );
-    const rows: unknown[] = [
-      ...(live?.messages?.length
-        ? [
-            {
-              id: "legacy-live",
-              title: "旧浏览器当前对话",
-              messages: live.messages,
-            },
-          ]
-        : []),
-      ...(Array.isArray(history) ? history : []),
-    ];
-    return rows.flatMap((item) => {
-      if (!item || typeof item !== "object") return [];
-      const v = item as {
-        id?: string;
-        title?: string;
-        messages?: RuntimeUiMessage[];
-      };
-      if (!Array.isArray(v.messages)) return [];
-      return [
-        {
-          id: String(v.id || "legacy"),
-          title: String(v.title || "旧浏览器对话"),
-          messages: v.messages
-            .filter(
-              (message) =>
-                message &&
-                ["user", "assistant", "tool"].includes(message.role) &&
-                typeof message.content === "string",
-            )
-            .map((message) => ({ ...message, id: createRuntimeClientId() })),
-        },
-      ];
-    });
+    const rows: LegacyChat[] = [];
+    const liveMessages = legacyMessages(live?.messages);
+    if (liveMessages.length) {
+      rows.push({
+        id: "legacy-live",
+        title: "旧浏览器当前对话",
+        messages: liveMessages,
+        source: "live",
+      });
+    }
+    if (Array.isArray(history)) {
+      history.forEach((item, index) => {
+        if (!item || typeof item !== "object") return;
+        const value = item as {
+          id?: string;
+          title?: string;
+          messages?: RuntimeUiMessage[];
+        };
+        const messages = legacyMessages(value.messages);
+        if (!messages.length) return;
+        rows.push({
+          id: `legacy-history-${index}-${String(value.id || "legacy")}`,
+          title: String(value.title || "旧浏览器对话"),
+          messages,
+          source: "history",
+          historyIndex: index,
+        });
+      });
+    }
+    return rows;
   } catch {
     return [];
   }
+}
+
+function deleteLegacyChat(item: LegacyChat): void {
+  if (item.source === "live") {
+    localStorage.removeItem("panelAgentLiveConversation");
+    return;
+  }
+  const parsed = JSON.parse(
+    localStorage.getItem("panelAgentConversationHistory") || "[]",
+  );
+  if (!Array.isArray(parsed)) {
+    localStorage.removeItem("panelAgentConversationHistory");
+    return;
+  }
+  const index = item.historyIndex ?? -1;
+  if (index < 0 || index >= parsed.length) return;
+  parsed.splice(index, 1);
+  if (parsed.length) {
+    localStorage.setItem(
+      "panelAgentConversationHistory",
+      JSON.stringify(parsed),
+    );
+  } else {
+    localStorage.removeItem("panelAgentConversationHistory");
+  }
+}
+
+function clearLegacyChats(): void {
+  localStorage.removeItem("panelAgentLiveConversation");
+  localStorage.removeItem("panelAgentConversationHistory");
 }
 export function RuntimePanelAgent(props: {
   terminalTabs: Tab[];
@@ -676,26 +723,69 @@ export function RuntimePanelAgent(props: {
         </Button>
       )}
       {legacy.length > 0 && (
-        <p className="pt-2 text-muted-foreground">
-          旧浏览器记录（选择后可继续，发送前确认导入）
-        </p>
+        <div className="flex items-center justify-between gap-2 pt-2">
+          <p className="text-muted-foreground">
+            旧浏览器记录（选择后可继续，发送前确认导入）
+          </p>
+          <Button
+            size="xs"
+            variant="ghost"
+            disabled={busy}
+            onClick={() =>
+              void interact(async () => {
+                if (!window.confirm("清空这个浏览器里的全部旧 Agent 对话缓存？"))
+                  return;
+                const viewingLegacy = legacySelection.current !== null;
+                clearLegacyChats();
+                if (viewingLegacy) reset();
+                else {
+                  legacySelection.current = null;
+                  setLegacy([]);
+                }
+                toast.success("旧浏览器对话缓存已清空");
+              })
+            }
+          >
+            清空旧缓存
+          </Button>
+        </div>
       )}
       {legacy.map((item) => (
-        <button
-          type="button"
+        <div
           key={item.id}
-          className="block w-full truncate rounded-lg p-2 text-left hover:bg-muted"
-          onClick={() => {
-            if (changing.current || pending.current) return;
-            reset();
-            legacySelection.current = item.messages;
-            setMessages(item.messages);
-            setInitialTargets([]);
-            toast.info("已打开旧记录；没有执行命令，也没有删除浏览器备份");
-          }}
+          className="flex items-center gap-1 rounded-lg border border-border/40 p-1"
         >
-          {item.title}
-        </button>
+          <button
+            type="button"
+            className="min-w-0 flex-1 truncate rounded-md p-1.5 text-left hover:bg-muted"
+            onClick={() => {
+              if (changing.current || pending.current) return;
+              reset();
+              legacySelection.current = item.messages;
+              setMessages(item.messages);
+              setInitialTargets([]);
+              toast.info("已打开旧记录；没有执行命令，也没有删除浏览器备份");
+            }}
+          >
+            {item.title}
+          </button>
+          <Button
+            size="xs"
+            variant="ghost"
+            disabled={busy}
+            onClick={() =>
+              void interact(async () => {
+                if (!window.confirm("删除这条旧浏览器缓存对话？")) return;
+                deleteLegacyChat(item);
+                if (legacySelection.current === item.messages) reset();
+                setLegacy(legacyChats());
+                toast.success("旧浏览器缓存对话已删除");
+              })
+            }
+          >
+            删除
+          </Button>
+        </div>
       ))}
     </div>
   );
