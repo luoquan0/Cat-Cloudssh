@@ -247,3 +247,26 @@ it("retains the current user's image and text attachment through compaction", ()
   expect(JSON.stringify(messages)).toContain("data:image/png;base64,YWJj");
   expect(JSON.stringify(messages)).toContain("important instruction");
 });
+
+it("describes shared-terminal shell semantics to the model", () => {
+  const messages = basePrompt(
+    config,
+    {
+      ...run,
+      options: { sshMode: "shared-terminal" },
+      targets: [
+        {
+          targetId: "ssh-a",
+          hostId: 42,
+          hostName: "A",
+          terminalSessionId: "terminal-session-123",
+        },
+      ],
+    },
+    { id: "task-shared", role: "user", content: "pwd" },
+    [],
+  );
+  const prompt = JSON.stringify(messages);
+  expect(prompt).toContain("same PTY");
+  expect(prompt).toContain("cwd and environment are inherited");
+});

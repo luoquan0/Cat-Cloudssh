@@ -4901,11 +4901,17 @@ wss.on("connection", async (ws: WebSocket, req) => {
 
                   const session = sessionManager.getSession(boundSessionId);
                   if (session) {
-                    sessionManager.bufferOutput(boundSessionId!, utf8String);
-                    sessionManager.broadcast(boundSessionId!, {
-                      type: "data",
-                      data: utf8String,
-                    });
+                    const visible = sessionManager.filterAgentRuntimeOutput(
+                      boundSessionId!,
+                      utf8String,
+                    );
+                    if (visible) {
+                      sessionManager.bufferOutput(boundSessionId!, visible);
+                      sessionManager.broadcast(boundSessionId!, {
+                        type: "data",
+                        data: visible,
+                      });
+                    }
                   }
                 } catch (error) {
                   sshLogger.error("Error encoding terminal data", error, {
@@ -4916,11 +4922,17 @@ wss.on("connection", async (ws: WebSocket, req) => {
                   const fallback = data.toString("latin1");
                   const session = sessionManager.getSession(boundSessionId);
                   if (session) {
-                    sessionManager.bufferOutput(boundSessionId!, fallback);
-                    sessionManager.broadcast(boundSessionId!, {
-                      type: "data",
-                      data: fallback,
-                    });
+                    const visible = sessionManager.filterAgentRuntimeOutput(
+                      boundSessionId!,
+                      fallback,
+                    );
+                    if (visible) {
+                      sessionManager.bufferOutput(boundSessionId!, visible);
+                      sessionManager.broadcast(boundSessionId!, {
+                        type: "data",
+                        data: visible,
+                      });
+                    }
                   }
                 }
               });

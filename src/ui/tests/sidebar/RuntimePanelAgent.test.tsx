@@ -187,7 +187,14 @@ describe("runtime-backed existing Agent view", () => {
     expect(api.start).toHaveBeenCalledOnce();
     expect(api.start.mock.calls[0][0]).toMatchObject({
       message: { role: "user", content: "inspect the server" },
-      targets: [{ targetId: "tab-a", hostId: 42 }],
+      targets: [
+        {
+          targetId: "tab-a",
+          hostId: 42,
+          terminalSessionId: "human-session",
+        },
+      ],
+      options: { sshMode: "mirror" },
     });
     expect(model.sendPanelAgentChat).not.toHaveBeenCalled();
     expect(terminal.terminalRef!.current!.sendInput).not.toHaveBeenCalled();

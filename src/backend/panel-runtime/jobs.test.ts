@@ -5,7 +5,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
-import type { Client } from "ssh2";
+import type { Client, ClientChannel } from "ssh2";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   RuntimeJob,
@@ -14,6 +14,7 @@ import type {
 } from "../../types/panel-runtime.js";
 import { OutputSpool, RuntimeJobs, waitAtMost } from "./jobs.js";
 import { RuntimeStore } from "./store.js";
+import { sessionManager } from "../hosts/terminal/session-manager.js";
 
 vi.mock("../hosts/host-resolver.js", () => ({ resolveHostById: vi.fn() }));
 vi.mock("../hosts/file-manager/ssh-connection.js", () => ({
@@ -23,8 +24,11 @@ vi.mock("../hosts/file-manager/ssh-connection.js", () => ({
 }));
 const paths: string[] = [];
 const databases: Database.Database[] = [];
+const terminalSessions: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
+  for (const id of terminalSessions.splice(0))
+    sessionManager.destroySession(id);
   for (const db of databases.splice(0)) db.close();
   for (const directory of paths.splice(0))
     await fs.rm(directory, { recursive: true, force: true });
@@ -261,5 +265,85 @@ describe("independent execution", () => {
         new AbortController().signal,
       ),
     ).rejects.toMatchObject({ code: "JOB_SCOPE" });
+  });
+});
+
+describe("shared terminal execution", () => {
+  it("uses the selected live PTY instead of opening a second SSH connection", async () => {
+    const { store, run, call } = await fixture();
+    const sessionId = "terminal-session-123";
+    terminalSessions.push(sessionId);
+    sessionManager.createSession(
+      "alice",
+      42,
+      "test",
+      120,
+      40,
+      undefined,
+      false,
+      { sessionId },
+    );
+    const session = sessionManager.getSession(sessionId)!;
+    class SharedChannel extends EventEmitter {
+      stderr = new PassThrough();
+      destroyed = false;
+      writes: string[] = [];
+      write(chunk: Buffer | string) {
+        const text = Buffer.isBuffer(chunk) ? chunk.toString("utf8") : chunk;
+        this.writes.push(text);
+        if (text === "\u0003") return true;
+        const token = text.match(/cloudssh-agent-begin=([0-9a-f]+)/)?.[1];
+        if (!token) return true;
+        setTimeout(() => {
+          this.emit(
+            "data",
+            Buffer.from(
+              `\u001b]777;cloudssh-agent-begin=${token}\u0007shared output\r\n\u001b]777;cloudssh-agent-end=${token};status=0\u0007`,
+            ),
+          );
+        }, 2);
+        return true;
+      }
+    }
+    const channel = new SharedChannel();
+    session.isConnected = true;
+    session.sshStream = channel as unknown as ClientChannel;
+    run.options = { sshMode: "shared-terminal" };
+    run.targets = [
+      {
+        targetId: "target",
+        hostId: 42,
+        hostName: "test",
+        terminalSessionId: sessionId,
+      },
+    ];
+    await store.saveRun("alice", run);
+
+    const connect = vi.fn();
+    const jobs = new RuntimeJobs(store, async () => {}, await spool(), connect);
+    const started = await jobs.start(
+      "alice",
+      run,
+      call,
+      new AbortController().signal,
+    );
+
+    expect(connect).not.toHaveBeenCalled();
+    expect(channel.writes.join("")).toContain("eval 'pwd'");
+
+    const output = await jobs.read(
+      "alice",
+      run,
+      started.id,
+      { waitSeconds: 2 },
+      2048,
+      new AbortController().signal,
+    );
+    expect(output).toMatchObject({
+      status: "completed",
+      exitCode: 0,
+      stdout: expect.stringContaining("shared output"),
+    });
+    expect(session.agentRuntimeLeaseId).toBeNull();
   });
 });

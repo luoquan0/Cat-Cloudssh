@@ -58,6 +58,7 @@ import {
   type PanelAgentToolCall,
 } from "@/api/panel-agent-api";
 import { MarkdownRenderer } from "@/features/file-manager/components/MarkdownRenderer";
+import type { RuntimeSshMode } from "@/types/panel-runtime";
 import type { Tab } from "@/types/ui-types";
 
 const COMMAND_OBSERVE_DELAY_MS = 1_200;
@@ -65,6 +66,7 @@ const COMMAND_OBSERVE_DELAY_MS = 1_200;
 const PANEL_AGENT_SELECTED_MODEL_STORAGE_KEY = "panelAgentSelectedModel";
 const PANEL_AGENT_MODEL_LIST_STORAGE_KEY = "panelAgentModelList";
 const PANEL_AGENT_THINKING_MODE_STORAGE_KEY = "panelAgentThinkingMode";
+const PANEL_AGENT_RUNTIME_SSH_MODE_STORAGE_KEY = "panelAgentRuntimeSshMode";
 const PANEL_AGENT_CONVERSATION_HISTORY_STORAGE_KEY =
   "panelAgentConversationHistory";
 const PANEL_AGENT_LIVE_CONVERSATION_STORAGE_KEY = "panelAgentLiveConversation";
@@ -89,6 +91,11 @@ const PANEL_AGENT_THINKING_MODES: PanelAgentReasoningEffort[] = [
   "low",
   "medium",
   "high",
+];
+const PANEL_AGENT_RUNTIME_SSH_MODES: RuntimeSshMode[] = [
+  "mirror",
+  "shared-terminal",
+  "isolated",
 ];
 
 export type PanelAgentConversationAction = {
@@ -140,6 +147,24 @@ function readStoredThinkingMode(): PanelAgentReasoningEffort {
 
 function writeStoredThinkingMode(mode: PanelAgentReasoningEffort) {
   safeSetPanelAgentStorage(PANEL_AGENT_THINKING_MODE_STORAGE_KEY, mode);
+}
+
+function readStoredRuntimeSshMode(): RuntimeSshMode {
+  if (typeof window === "undefined") return "mirror";
+  try {
+    const value = window.localStorage.getItem(
+      PANEL_AGENT_RUNTIME_SSH_MODE_STORAGE_KEY,
+    );
+    return PANEL_AGENT_RUNTIME_SSH_MODES.includes(value as RuntimeSshMode)
+      ? (value as RuntimeSshMode)
+      : "mirror";
+  } catch {
+    return "mirror";
+  }
+}
+
+function writeStoredRuntimeSshMode(mode: RuntimeSshMode) {
+  safeSetPanelAgentStorage(PANEL_AGENT_RUNTIME_SSH_MODE_STORAGE_KEY, mode);
 }
 
 function panelModelForSettings(settings: PanelAgentSettings): string {
@@ -738,6 +763,9 @@ export function PanelAgentPanel({
   const [models, setModels] = useState(readStoredModelList);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [thinkingMode, setThinkingMode] = useState(readStoredThinkingMode);
+  const [runtimeSshMode, setRuntimeSshMode] = useState<RuntimeSshMode>(
+    readStoredRuntimeSshMode,
+  );
   const [attachments, setAttachments] = useState<PanelAgentChatAttachment[]>(
     [],
   );
@@ -873,11 +901,29 @@ export function PanelAgentPanel({
     writeStoredThinkingMode(mode);
   }
 
+  function updateRuntimeSshMode(mode: RuntimeSshMode) {
+    setRuntimeSshMode(mode);
+    writeStoredRuntimeSshMode(mode);
+    if (mode === "shared-terminal" && selectedTabIds.size > 1) {
+      const preferred = selectedTabIds.has(activeTabId)
+        ? activeTabId
+        : [...selectedTabIds][0];
+      setSelectedTabIds(preferred ? new Set([preferred]) : new Set());
+    }
+  }
+
   function toggleTab(tabId: string) {
     setSelectedTabIds((prev) => {
+      if (prev.has(tabId)) {
+        const next = new Set(prev);
+        next.delete(tabId);
+        return next;
+      }
+      if (runtimeMode && runtimeSshMode === "shared-terminal") {
+        return new Set([tabId]);
+      }
       const next = new Set(prev);
-      if (next.has(tabId)) next.delete(tabId);
-      else next.add(tabId);
+      next.add(tabId);
       return next;
     });
   }
@@ -1058,6 +1104,7 @@ export function PanelAgentPanel({
           model: selectedModel.trim() || undefined,
           reasoningEffort: thinkingMode,
           skillIds: [...selectedSkillIds],
+          sshMode: runtimeSshMode,
         });
       return;
     }
@@ -1365,6 +1412,13 @@ export function PanelAgentPanel({
   const selectedTargetSummary = selectedTerminalTabs
     .map((tab) => tab.host?.name ?? tab.label)
     .join(" · ");
+  const sharedTerminalContext =
+    selectedTerminalTabs.length === 1
+      ? selectedTerminalTabs[0].terminalRef?.current?.getSessionContext?.()
+      : null;
+  const sharedTerminalReady = Boolean(
+    sharedTerminalContext?.connected && sharedTerminalContext.sessionId,
+  );
   const currentModelLabel =
     selectedModel.trim() || settings?.model || t("panelAgent.model");
   const selectableModels =
@@ -1386,7 +1440,10 @@ export function PanelAgentPanel({
     adminConfigMissing ||
     modelMissing ||
     !settings ||
-    Boolean(runtimeBridge?.blocked);
+    Boolean(runtimeBridge?.blocked) ||
+    (runtimeMode &&
+      runtimeSshMode === "shared-terminal" &&
+      !sharedTerminalReady);
   const chatDisabled = working || sendDisabled;
   function handleDraftKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.nativeEvent.isComposing) return;
@@ -1573,6 +1630,65 @@ export function PanelAgentPanel({
             </div>
           )}
         </div>
+        {runtimeMode && (
+          <div
+            data-testid="panel-agent-runtime-ssh-mode"
+            className="space-y-2 rounded-2xl border border-border/50 bg-background/55 p-2.5 shadow-sm backdrop-blur"
+          >
+            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+              <Terminal className="size-3" />
+              SSH 执行方式
+            </div>
+            <p className="text-[10px] leading-4 text-muted-foreground">
+              默认独立执行并把过程同步显示到左侧终端；共享模式会使用同一个
+              PTY，并在 Agent 命令执行期间临时锁定人工输入。
+            </p>
+            {(
+              [
+                {
+                  mode: "mirror",
+                  label: "独立执行 + 同步显示",
+                  hint: "后端独立 SSH 执行；左侧只显示命令和输出，不会重复执行。",
+                },
+                {
+                  mode: "shared-terminal",
+                  label: "共享所选终端 SSH",
+                  hint: "与一个已连接终端共享同一 shell、cwd 和环境变量。",
+                },
+                {
+                  mode: "isolated",
+                  label: "完全独立",
+                  hint: "保持后台独立 SSH，不向左侧终端同步显示。",
+                },
+              ] as const
+            ).map((item) => {
+              const unavailable =
+                item.mode === "shared-terminal" && !sharedTerminalReady;
+              return (
+                <button
+                  key={item.mode}
+                  type="button"
+                  disabled={unavailable}
+                  onClick={() => updateRuntimeSshMode(item.mode)}
+                  aria-pressed={runtimeSshMode === item.mode}
+                  className={`block w-full rounded-xl border p-2 text-left transition-colors ${runtimeSshMode === item.mode ? "border-accent-brand bg-accent-brand/10 text-foreground" : "border-border/60 bg-background/55 text-muted-foreground hover:border-accent-brand/30"} ${unavailable ? "cursor-not-allowed opacity-45" : ""}`}
+                >
+                  <span className="block text-[11px] font-medium">
+                    {item.label}
+                  </span>
+                  <span className="mt-0.5 block text-[10px] leading-4">
+                    {item.hint}
+                  </span>
+                </button>
+              );
+            })}
+            {!sharedTerminalReady && (
+              <p className="text-[10px] text-amber-600">
+                共享模式需要只选择一个当前已连接、已建立会话的 SSH 终端。
+              </p>
+            )}
+          </div>
+        )}
         <div className="space-y-2 rounded-2xl border border-border/50 bg-background/55 p-2.5 shadow-sm backdrop-blur">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
             <ShieldCheck className="size-3" />

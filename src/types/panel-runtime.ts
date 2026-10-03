@@ -24,16 +24,19 @@ export type RuntimeMessage = {
   toolCalls?: RuntimeToolCall[];
   attachments?: RuntimeAttachment[];
 };
+export type RuntimeSshMode = "isolated" | "mirror" | "shared-terminal";
 export type RuntimeTarget = {
   targetId: string;
   hostId: number;
   hostName: string;
   projectHostId?: number;
+  terminalSessionId?: string;
 };
 export type RuntimeOptions = {
   model?: string;
   reasoningEffort?: "auto" | "low" | "medium" | "high";
   skillIds?: string[];
+  sshMode?: RuntimeSshMode;
 };
 export type RuntimeStatus =
   | "queued"

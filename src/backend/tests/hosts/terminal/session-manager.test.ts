@@ -457,6 +457,46 @@ describe("TerminalSessionManager - multiplayer participants", () => {
     sessionManager.destroySession(id);
   });
 
+  it("gives Panel Agent an exclusive write lease over the owner's PTY", () => {
+    const id = createConnectedSession();
+    const ownerWs = makeFakeWs();
+    const session = sessionManager.attachWs(id, "owner-1", ownerWs)!;
+    session.sshStream = {
+      destroyed: false,
+    } as unknown as import("ssh2").ClientChannel;
+
+    expect(sessionManager.canWriteToSession(id, ownerWs)).toBe(true);
+    sessionManager.acquireAgentRuntimeLease(
+      id,
+      "owner-1",
+      1,
+      "agent-lease-1",
+      "0123456789abcdef",
+    );
+    expect(session.agentRuntimeLeaseId).toBe("agent-lease-1");
+    expect(sessionManager.canWriteToSession(id, ownerWs)).toBe(false);
+    expect(ownerWs.send).toHaveBeenCalledWith(
+      expect.stringContaining('"type":"agentControlState","active":true'),
+    );
+
+    const token = "0123456789abcdef";
+    expect(
+      sessionManager.filterAgentRuntimeOutput(
+        id,
+        "root@host:~# printf wrapper\r\n" +
+          `\u001b]777;cloudssh-agent-begin=${token}\u0007hello\r\n` +
+          `\u001b]777;cloudssh-agent-end=${token};status=0\u0007root@host:~# `,
+      ),
+    ).toBe("hello\r\nroot@host:~# ");
+
+    expect(sessionManager.releaseAgentRuntimeLease(id, "agent-lease-1")).toBe(
+      true,
+    );
+    expect(session.agentRuntimeLeaseId).toBeNull();
+    expect(sessionManager.canWriteToSession(id, ownerWs)).toBe(true);
+    sessionManager.destroySession(id);
+  });
+
   it("joinAsParticipant returns null for a nonexistent or unconnected session", () => {
     expect(
       sessionManager.joinAsParticipant("does-not-exist", makeFakeWs(), {

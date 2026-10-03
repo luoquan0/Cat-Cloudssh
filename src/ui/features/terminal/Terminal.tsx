@@ -361,6 +361,7 @@ const TerminalInner = forwardRef<TerminalHandle, SSHTerminalProps>(
     const [isManagedTmux, setIsManagedTmux] = useState(sessionManagedTmux);
     const inputBlockedRef = useRef(false);
     const agentInputBlockedRef = useRef(Boolean(hostConfig.agentSessionId));
+    const panelAgentInputBlockedRef = useRef(false);
     const [agentAccessMode, setAgentAccessMode] =
       useState<AgentSessionAccessMode | null>(
         hostConfig.agentSessionId ? "read-only" : null,
@@ -471,12 +472,17 @@ const TerminalInner = forwardRef<TerminalHandle, SSHTerminalProps>(
     const syncTerminalInputState = useCallback(() => {
       if (terminal) {
         terminal.options.disableStdin =
-          inputBlockedRef.current || agentInputBlockedRef.current;
+          inputBlockedRef.current ||
+          agentInputBlockedRef.current ||
+          panelAgentInputBlockedRef.current;
       }
     }, [terminal]);
 
     const isTerminalInputBlocked = useCallback(
-      () => inputBlockedRef.current || agentInputBlockedRef.current,
+      () =>
+        inputBlockedRef.current ||
+        agentInputBlockedRef.current ||
+        panelAgentInputBlockedRef.current,
       [],
     );
 
@@ -1640,6 +1646,8 @@ const TerminalInner = forwardRef<TerminalHandle, SSHTerminalProps>(
 
       ws.addEventListener("open", async () => {
         if (!isCurrentConnection()) return;
+        panelAgentInputBlockedRef.current = false;
+        syncTerminalInputState();
         alternateScreenModeRef.current = false;
         connectionTimeoutRef.current = setTimeout(() => {
           if (
@@ -1824,6 +1832,32 @@ const TerminalInner = forwardRef<TerminalHandle, SSHTerminalProps>(
                 stringData,
               );
             }
+          } else if (msg.type === "agentTrace") {
+            const phase = String(msg.phase || "");
+            if (phase === "conceal") {
+              terminal.write("\u001b[8m");
+            } else if (phase === "reveal") {
+              terminal.write("\u001b[28m");
+            } else if (phase === "start") {
+              const command = cleanTerminalContext(String(msg.command || ""))
+                .replace(/\r?\n/g, " ")
+                .trim();
+              terminal.write(`\r\n\u001b[35m[Agent]\u001b[0m $ ${command}\r\n`);
+            } else if (phase === "stdout" || phase === "stderr") {
+              terminal.write(String(msg.data || ""));
+            } else if (phase === "end") {
+              const status = cleanTerminalContext(String(msg.status || "done"));
+              const exitCode =
+                typeof msg.exitCode === "number"
+                  ? ` · exit ${msg.exitCode}`
+                  : "";
+              terminal.write(
+                `\r\n\u001b[35m[Agent]\u001b[0m ${status}${exitCode}\r\n`,
+              );
+            }
+          } else if (msg.type === "agentControlState") {
+            panelAgentInputBlockedRef.current = msg.active === true;
+            syncTerminalInputState();
           } else if (msg.type === "error") {
             const rawErrorMessage = msg.message || t("terminal.unknownError");
             const isAgentSessionError =

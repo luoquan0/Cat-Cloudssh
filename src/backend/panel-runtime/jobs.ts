@@ -16,6 +16,7 @@ import {
 } from "../hosts/file-manager/ssh-connection.js";
 import { RuntimeError, RuntimeStore, requireValue, validId } from "./store.js";
 import { needsApproval, redactEvidence } from "./policy.js";
+import { sessionManager } from "../hosts/terminal/session-manager.js";
 
 export function positiveSetting(name: string, fallback: number): number {
   const value = Number(process.env[name]);
@@ -302,6 +303,24 @@ export class RuntimeJobs {
   running(runId: string) {
     return [...this.live.values()].filter((item) => item.job.runId === runId);
   }
+
+  private terminalTrace(
+    owner: string,
+    target: RuntimeTarget,
+    payload: Record<string, unknown>,
+  ) {
+    if (!target.terminalSessionId) return;
+    const session = sessionManager.getSession(target.terminalSessionId);
+    if (
+      !session ||
+      session.userId !== owner ||
+      session.hostId !== target.hostId ||
+      !session.isConnected
+    )
+      return;
+    sessionManager.broadcast(session.id, { type: "agentTrace", ...payload });
+  }
+
   async start(
     owner: string,
     run: RuntimeRun,
@@ -423,7 +442,19 @@ export class RuntimeJobs {
       resolveDone = resolve;
     });
     this.live.set(job.id, { job, controller, done });
-    void this.execute(owner, target, job, timeout, controller)
+    const sshMode = persisted.options.sshMode ?? "isolated";
+    void (
+      sshMode === "shared-terminal"
+        ? this.executeSharedTerminal(owner, target, job, timeout, controller)
+        : this.execute(
+            owner,
+            target,
+            job,
+            timeout,
+            controller,
+            sshMode === "mirror",
+          )
+    )
       .catch((error) => {
         job.status = "failed";
         job.error = redactEvidence(
@@ -451,12 +482,216 @@ export class RuntimeJobs {
     this.checkHealthy(run.id);
     return { ...job };
   }
+  private async executeSharedTerminal(
+    owner: string,
+    target: RuntimeTarget,
+    job: RuntimeJob,
+    timeout: number,
+    controller: AbortController,
+  ) {
+    const signal = controller.signal;
+    const sessionId = target.terminalSessionId;
+    requireValue(
+      sessionId,
+      409,
+      "SHARED_TERMINAL_REQUIRED",
+      "共享当前 SSH 需要一个已连接终端",
+    );
+    const leaseId = `panel-agent-${job.id}`;
+    const token = crypto.randomBytes(16).toString("hex");
+    const beginMarker = `\u001b]777;cloudssh-agent-begin=${token}\u0007`;
+    const endPrefix = `\u001b]777;cloudssh-agent-end=${token};status=`;
+    let queue = Promise.resolve();
+    let pendingBytes = 0;
+    let outputFailed = false;
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort(new Error("Command deadline exceeded"));
+    }, timeout * 1000);
+
+    try {
+      await this.authorize(owner, target);
+      const session = sessionManager.acquireAgentRuntimeLease(
+        sessionId,
+        owner,
+        target.hostId,
+        leaseId,
+        token,
+      );
+      const stream = session.sshStream!;
+      job.status = "running";
+      this.terminalTrace(owner, target, {
+        phase: "start",
+        command: job.command,
+        shared: true,
+      });
+      await new Promise<void>((resolve, reject) => {
+        let settled = false;
+        let state: "waiting" | "capturing" | "status" = "waiting";
+        let carry = "";
+        let abortTimer: ReturnType<typeof setTimeout> | undefined;
+
+        const finish = (error?: unknown) => {
+          if (settled) return;
+          settled = true;
+          if (abortTimer) clearTimeout(abortTimer);
+          signal.removeEventListener("abort", abort);
+          stream.removeListener("data", onData);
+          stream.removeListener("error", failed);
+          stream.removeListener("close", closed);
+          if (error) reject(error);
+          else resolve();
+        };
+        const failed = (error: Error) => finish(error);
+        const closed = () =>
+          finish(new Error("共享 SSH 会话在命令完成前已断开"));
+        const append = (value: string) => {
+          if (!value) return;
+          const data = Buffer.from(value, "utf8");
+          pendingBytes += data.length;
+          if (pendingBytes > 8 * 1024 * 1024) {
+            outputFailed = true;
+            controller.abort(
+              new Error("Output write backlog exceeded memory safety window"),
+            );
+            return;
+          }
+          queue = queue
+            .then(() => this.spool.append(job, "stdout", data))
+            .catch((error) => {
+              outputFailed = true;
+              job.error =
+                error instanceof Error ? error.message : String(error);
+              controller.abort(error);
+            })
+            .finally(() => {
+              pendingBytes -= data.length;
+            });
+        };
+        const consumeStatus = (value: string) => {
+          const bell = value.indexOf("\u0007");
+          if (bell < 0) {
+            carry = value.slice(0, 64);
+            return;
+          }
+          const raw = value.slice(0, bell);
+          const code = Number.parseInt(raw, 10);
+          job.exitCode = Number.isSafeInteger(code) ? code : null;
+          finish();
+        };
+        const consumeCapture = (value: string) => {
+          const end = value.indexOf(endPrefix);
+          if (end >= 0) {
+            append(value.slice(0, end));
+            state = "status";
+            consumeStatus(value.slice(end + endPrefix.length));
+            return;
+          }
+          const keep = Math.min(
+            value.length,
+            Math.max(0, endPrefix.length - 1),
+          );
+          append(value.slice(0, value.length - keep));
+          carry = keep ? value.slice(-keep) : "";
+        };
+        const onData = (chunk: Buffer | string) => {
+          let value =
+            carry + (Buffer.isBuffer(chunk) ? chunk.toString("utf8") : chunk);
+          carry = "";
+          if (state === "waiting") {
+            const begin = value.indexOf(beginMarker);
+            if (begin < 0) {
+              const keep = Math.min(
+                value.length,
+                Math.max(0, beginMarker.length - 1),
+              );
+              carry = keep ? value.slice(-keep) : "";
+              return;
+            }
+            state = "capturing";
+            value = value.slice(begin + beginMarker.length);
+          }
+          if (state === "capturing") consumeCapture(value);
+          else if (state === "status") consumeStatus(value);
+        };
+        const abort = () => {
+          try {
+            stream.write("\u0003");
+          } catch {
+            // The shared shell may already be gone.
+          }
+          abortTimer = setTimeout(() => finish(), 1500);
+        };
+
+        stream.prependListener("data", onData);
+        stream.once("error", failed);
+        stream.once("close", closed);
+        signal.addEventListener("abort", abort, { once: true });
+
+        const command = job.cwd
+          ? `cd -- ${shellQuote(job.cwd)} && eval ${shellQuote(job.command)}`
+          : `eval ${shellQuote(job.command)}`;
+        const wrapper =
+          `printf '\\033]777;cloudssh-agent-begin=${token}\\007'; ` +
+          "__cloudssh_had_e=0; case $- in *e*) __cloudssh_had_e=1; set +e;; esac; " +
+          command +
+          "; __cloudssh_status=$?; " +
+          'if [ "$__cloudssh_had_e" = 1 ]; then set -e; fi; ' +
+          `printf '\\033]777;cloudssh-agent-end=${token};status=%s\\007' "$__cloudssh_status"\r`;
+        try {
+          stream.write(wrapper);
+        } catch (error) {
+          finish(error);
+        }
+        if (signal.aborted) abort();
+      });
+
+      await queue;
+      if (signal.aborted) {
+        job.status = outputFailed
+          ? "output_limit"
+          : timedOut
+            ? "timed_out"
+            : "cancelled";
+        job.error ||= "已请求中断共享终端命令；远端前台进程可能需要人工核对";
+      } else if (job.exitCode === null) {
+        job.status = "interrupted";
+        job.error = "共享终端没有返回命令结束标记，结果未知";
+      } else {
+        job.status = job.exitCode === 0 ? "completed" : "failed";
+      }
+    } catch (error) {
+      await queue;
+      job.status = outputFailed
+        ? "output_limit"
+        : timedOut
+          ? "timed_out"
+          : signal.aborted
+            ? "cancelled"
+            : "interrupted";
+      job.error = redactEvidence(
+        error instanceof Error ? error.message : String(error),
+      ).slice(0, 800);
+    } finally {
+      clearTimeout(timer);
+      sessionManager.releaseAgentRuntimeLease(sessionId, leaseId);
+      this.terminalTrace(owner, target, {
+        phase: "end",
+        status: job.status,
+        exitCode: job.exitCode,
+        shared: true,
+      });
+    }
+  }
+
   private async execute(
     owner: string,
     target: RuntimeTarget,
     job: RuntimeJob,
     timeout: number,
     controller: AbortController,
+    mirror = false,
   ) {
     const signal = controller.signal;
     let client: Client | undefined;
@@ -468,6 +703,13 @@ export class RuntimeJobs {
       timedOut = true;
       controller.abort(new Error("Command deadline exceeded"));
     }, timeout * 1000);
+    if (mirror) {
+      this.terminalTrace(owner, target, {
+        phase: "start",
+        command: job.command,
+        shared: false,
+      });
+    }
     try {
       await this.authorize(owner, target);
       client = await this.connect(owner, target, signal);
@@ -524,6 +766,13 @@ export class RuntimeJobs {
           let pendingBytes = 0;
           const receive = (kind: "stdout" | "stderr", data: Buffer) => {
             if (signal.aborted) return;
+            if (mirror) {
+              this.terminalTrace(owner, target, {
+                phase: kind,
+                data: data.toString("utf8"),
+                shared: false,
+              });
+            }
             pendingBytes += data.length;
             if (pendingBytes > 8 * 1024 * 1024) {
               outputFailed = true;
@@ -598,6 +847,14 @@ export class RuntimeJobs {
         client?.end();
       } catch {
         /* Only the dedicated channel is closed. */
+      }
+      if (mirror) {
+        this.terminalTrace(owner, target, {
+          phase: "end",
+          status: job.status,
+          exitCode: job.exitCode,
+          shared: false,
+        });
       }
     }
   }

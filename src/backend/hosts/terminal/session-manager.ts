@@ -55,6 +55,12 @@ export interface TerminalSession {
 
   participants: Map<string, SessionParticipant>;
   writeLeaseParticipantId: string | null;
+  /** Panel Agent 对同一交互式 PTY 的独占写入租约。 */
+  agentRuntimeLeaseId: string | null;
+  /** 共享 PTY 内部控制标记仅用于捕获结果，绝不能显示给浏览器终端。 */
+  agentRuntimeOutputToken: string | null;
+  agentRuntimeOutputState: "waiting" | "capturing" | "passthrough";
+  agentRuntimeOutputCarry: string;
   lastDetachedAt: number | null;
   retentionExpiresAt: number | null;
   detachTimeout: NodeJS.Timeout | null;
@@ -358,6 +364,10 @@ class TerminalSessionManager {
       createdAt: now,
       participants: new Map(),
       writeLeaseParticipantId: null,
+      agentRuntimeLeaseId: null,
+      agentRuntimeOutputToken: null,
+      agentRuntimeOutputState: "waiting",
+      agentRuntimeOutputCarry: "",
       lastDetachedAt: null,
       retentionExpiresAt: null,
       detachTimeout: null,
@@ -849,12 +859,127 @@ class TerminalSessionManager {
     }
   }
 
+  acquireAgentRuntimeLease(
+    sessionId: string,
+    userId: string,
+    hostId: number,
+    leaseId: string,
+    outputToken: string,
+  ): TerminalSession {
+    const session = this.sessions.get(sessionId);
+    if (
+      !session ||
+      session.userId !== userId ||
+      session.hostId !== hostId ||
+      !session.isConnected ||
+      !session.sshStream ||
+      session.sshStream.destroyed
+    ) {
+      throw Object.assign(new Error("所选共享 SSH 会话已断开或不匹配"), {
+        code: "TERMINAL_SESSION_UNAVAILABLE",
+      });
+    }
+    if (session.agentSessionId) {
+      throw Object.assign(
+        new Error("Agent 持续会话不能作为 Panel Agent 共享终端"),
+        {
+          code: "TERMINAL_SESSION_AGENT_CONTROLLED",
+        },
+      );
+    }
+    if (session.pinTransitionActive || session.expirationInProgress) {
+      throw Object.assign(new Error("终端正在切换状态，请稍后重试"), {
+        code: "TERMINAL_SESSION_TRANSITION",
+      });
+    }
+    if (
+      session.agentRuntimeLeaseId &&
+      session.agentRuntimeLeaseId !== leaseId
+    ) {
+      throw Object.assign(new Error("该终端正在由另一个 Agent 任务使用"), {
+        code: "TERMINAL_SESSION_BUSY",
+      });
+    }
+    session.agentRuntimeLeaseId = leaseId;
+    session.agentRuntimeOutputToken = outputToken;
+    session.agentRuntimeOutputState = "waiting";
+    session.agentRuntimeOutputCarry = "";
+    this.broadcast(session.id, {
+      type: "agentControlState",
+      active: true,
+      leaseId,
+    });
+    return session;
+  }
+
+  releaseAgentRuntimeLease(sessionId: string, leaseId: string): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.agentRuntimeLeaseId !== leaseId) return false;
+    session.agentRuntimeLeaseId = null;
+    session.agentRuntimeOutputToken = null;
+    session.agentRuntimeOutputState = "waiting";
+    session.agentRuntimeOutputCarry = "";
+    this.broadcast(session.id, {
+      type: "agentControlState",
+      active: false,
+      leaseId,
+    });
+    return true;
+  }
+
+  filterAgentRuntimeOutput(sessionId: string, data: string): string {
+    const session = this.sessions.get(sessionId);
+    const token = session?.agentRuntimeOutputToken;
+    if (!session || !session.agentRuntimeLeaseId || !token || !data) {
+      return data;
+    }
+
+    const begin = `\u001b]777;cloudssh-agent-begin=${token}\u0007`;
+    const end = `\u001b]777;cloudssh-agent-end=${token};status=`;
+    let value = session.agentRuntimeOutputCarry + data;
+    session.agentRuntimeOutputCarry = "";
+
+    if (session.agentRuntimeOutputState === "waiting") {
+      const index = value.indexOf(begin);
+      if (index < 0) {
+        const keep = Math.min(value.length, Math.max(0, begin.length - 1));
+        session.agentRuntimeOutputCarry = keep ? value.slice(-keep) : "";
+        return "";
+      }
+      value = value.slice(index + begin.length);
+      session.agentRuntimeOutputState = "capturing";
+    }
+
+    if (session.agentRuntimeOutputState === "passthrough") {
+      return value;
+    }
+
+    const endIndex = value.indexOf(end);
+    if (endIndex < 0) {
+      const keep = Math.min(value.length, Math.max(0, end.length - 1));
+      session.agentRuntimeOutputCarry = keep ? value.slice(-keep) : "";
+      return value.slice(0, value.length - keep);
+    }
+
+    const before = value.slice(0, endIndex);
+    const statusAndRest = value.slice(endIndex + end.length);
+    const bell = statusAndRest.indexOf("\u0007");
+    if (bell < 0) {
+      session.agentRuntimeOutputCarry = value.slice(endIndex);
+      return before;
+    }
+
+    session.agentRuntimeOutputState = "passthrough";
+    return before + statusAndRest.slice(bell + 1);
+  }
+
   canWriteToSession(sessionId: string, ws: WebSocket): boolean {
     const session = this.sessions.get(sessionId);
     if (
       !session ||
       session.pinTransitionActive ||
-      session.expirationInProgress
+      session.expirationInProgress ||
+      session.agentRuntimeLeaseId
     ) {
       return false;
     }
@@ -1030,6 +1155,19 @@ class TerminalSessionManager {
     this.reconcileWriteLease(session);
     session.attachedTabInstanceId = tabInstanceId;
     this.touchOpenTab(session);
+    if (session.agentRuntimeLeaseId) {
+      try {
+        ws.send(
+          JSON.stringify({
+            type: "agentControlState",
+            active: true,
+            leaseId: session.agentRuntimeLeaseId,
+          }),
+        );
+      } catch {
+        /* The normal attachment lifecycle will handle a socket that closed here. */
+      }
+    }
 
     if (session.managedTmux) {
       session.retentionExpiresAt = null;
