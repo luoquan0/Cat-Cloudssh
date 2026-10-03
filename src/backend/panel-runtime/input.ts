@@ -139,7 +139,10 @@ export function parseStartRuntime(raw: unknown): StartRuntimeInput {
         ? undefined
         : naturalNumber(target.projectHostId);
     const targetId = text(target.targetId, 128);
-    const terminalSessionId = target.terminalSessionId;
+    const terminalSessionId =
+      target.terminalSessionId === undefined
+        ? undefined
+        : text(target.terminalSessionId, 128);
     requireValue(
       terminalSessionId === undefined || validId(terminalSessionId),
       400,
