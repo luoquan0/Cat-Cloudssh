@@ -57,6 +57,10 @@ export interface TerminalSession {
   writeLeaseParticipantId: string | null;
   /** Panel Agent 对同一交互式 PTY 的独占写入租约。 */
   agentRuntimeLeaseId: string | null;
+  /** 共享 PTY 内部控制标记仅用于捕获结果，绝不能显示给浏览器终端。 */
+  agentRuntimeOutputToken: string | null;
+  agentRuntimeOutputState: "waiting" | "capturing" | "passthrough";
+  agentRuntimeOutputCarry: string;
   lastDetachedAt: number | null;
   retentionExpiresAt: number | null;
   detachTimeout: NodeJS.Timeout | null;
@@ -361,6 +365,9 @@ class TerminalSessionManager {
       participants: new Map(),
       writeLeaseParticipantId: null,
       agentRuntimeLeaseId: null,
+      agentRuntimeOutputToken: null,
+      agentRuntimeOutputState: "waiting",
+      agentRuntimeOutputCarry: "",
       lastDetachedAt: null,
       retentionExpiresAt: null,
       detachTimeout: null,
@@ -857,6 +864,7 @@ class TerminalSessionManager {
     userId: string,
     hostId: number,
     leaseId: string,
+    outputToken: string,
   ): TerminalSession {
     const session = this.sessions.get(sessionId);
     if (
@@ -890,6 +898,9 @@ class TerminalSessionManager {
       });
     }
     session.agentRuntimeLeaseId = leaseId;
+    session.agentRuntimeOutputToken = outputToken;
+    session.agentRuntimeOutputState = "waiting";
+    session.agentRuntimeOutputCarry = "";
     this.broadcast(session.id, {
       type: "agentControlState",
       active: true,
@@ -902,12 +913,61 @@ class TerminalSessionManager {
     const session = this.sessions.get(sessionId);
     if (!session || session.agentRuntimeLeaseId !== leaseId) return false;
     session.agentRuntimeLeaseId = null;
+    session.agentRuntimeOutputToken = null;
+    session.agentRuntimeOutputState = "waiting";
+    session.agentRuntimeOutputCarry = "";
     this.broadcast(session.id, {
       type: "agentControlState",
       active: false,
       leaseId,
     });
     return true;
+  }
+
+  filterAgentRuntimeOutput(sessionId: string, data: string): string {
+    const session = this.sessions.get(sessionId);
+    const token = session?.agentRuntimeOutputToken;
+    if (!session || !session.agentRuntimeLeaseId || !token || !data) {
+      return data;
+    }
+
+    const begin = `\u001b]777;cloudssh-agent-begin=${token}\u0007`;
+    const end = `\u001b]777;cloudssh-agent-end=${token};status=`;
+    let value = session.agentRuntimeOutputCarry + data;
+    session.agentRuntimeOutputCarry = "";
+
+    if (session.agentRuntimeOutputState === "waiting") {
+      const index = value.indexOf(begin);
+      if (index < 0) {
+        const keep = Math.min(value.length, Math.max(0, begin.length - 1));
+        session.agentRuntimeOutputCarry = keep ? value.slice(-keep) : "";
+        return "";
+      }
+      value = value.slice(index + begin.length);
+      session.agentRuntimeOutputState = "capturing";
+    }
+
+    if (session.agentRuntimeOutputState === "passthrough") {
+      return value;
+    }
+
+    const endIndex = value.indexOf(end);
+    if (endIndex < 0) {
+      const keep = Math.min(value.length, Math.max(0, end.length - 1));
+      session.agentRuntimeOutputCarry = keep ? value.slice(-keep) : "";
+      return value.slice(0, value.length - keep);
+    }
+
+    const before = value.slice(0, endIndex);
+    const statusAndRest = value.slice(endIndex + end.length);
+    const bell = statusAndRest.indexOf("\u0007");
+    if (bell < 0) {
+      session.agentRuntimeOutputCarry = value.slice(endIndex);
+      return before;
+    }
+
+    session.agentRuntimeOutputState = "passthrough";
+    return before + statusAndRest.slice(bell + 1);
   }
 
   canWriteToSession(sessionId: string, ws: WebSocket): boolean {

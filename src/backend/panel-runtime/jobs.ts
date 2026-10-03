@@ -503,7 +503,6 @@ export class RuntimeJobs {
     let pendingBytes = 0;
     let outputFailed = false;
     let timedOut = false;
-    let concealed = false;
     const timer = setTimeout(() => {
       timedOut = true;
       controller.abort(new Error("Command deadline exceeded"));
@@ -516,6 +515,7 @@ export class RuntimeJobs {
         owner,
         target.hostId,
         leaseId,
+        token,
       );
       const stream = session.sshStream!;
       job.status = "running";
@@ -524,9 +524,6 @@ export class RuntimeJobs {
         command: job.command,
         shared: true,
       });
-      this.terminalTrace(owner, target, { phase: "conceal" });
-      concealed = true;
-
       await new Promise<void>((resolve, reject) => {
         let settled = false;
         let state: "waiting" | "capturing" | "status" = "waiting";
@@ -608,10 +605,6 @@ export class RuntimeJobs {
               return;
             }
             state = "capturing";
-            if (concealed) {
-              this.terminalTrace(owner, target, { phase: "reveal" });
-              concealed = false;
-            }
             value = value.slice(begin + beginMarker.length);
           }
           if (state === "capturing") consumeCapture(value);
@@ -678,9 +671,6 @@ export class RuntimeJobs {
       ).slice(0, 800);
     } finally {
       clearTimeout(timer);
-      if (concealed) {
-        this.terminalTrace(owner, target, { phase: "reveal" });
-      }
       sessionManager.releaseAgentRuntimeLease(sessionId, leaseId);
       this.terminalTrace(owner, target, {
         phase: "end",
