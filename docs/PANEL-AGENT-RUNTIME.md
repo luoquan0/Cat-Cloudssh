@@ -1,4 +1,10 @@
-# Panel Agent runtime - 2.6.0-cloudssh.61
+# Panel Agent runtime - 2.6.0-cloudssh.63
+
+## .63 optional automatic execution
+
+Panel Agent now exposes a persisted **automatic execution** toggle for runtime-backed chats. The default remains **prompt for confirmation**. When automatic execution is enabled before a new task is sent, commands that would normally enter `waiting_approval` are auto-approved for that run and execute without per-command confirmation cards. The choice is stored in the browser and is copied into the backend run options, so reconnecting the UI does not change an already-created run's approval behavior.
+
+Automatic execution does not bypass target ownership checks, current host authorization, job scoping, concurrency limits, command deadlines, output limits, persistence-before-execution, shared-terminal write leases, cancellation, memory pressure checks, or the progress-loop watchdog. It only removes the interactive approval wait. Switching the toggle while a task is already running affects the next newly submitted task, not an existing pending approval.
 
 ## .61 terminal execution modes
 
@@ -26,7 +32,7 @@ Open a saved SSH host, select it in the existing Agent context selector, and cha
 
 The Agent no longer types generated commands into the human terminal. It uses a dedicated non-PTY SSH `exec` connection with explicit `cwd`, stdout, stderr and a real exit status. A `running` job is not a successful command. The model can poll a background job using `read_job_output`, or request cancellation using `cancel_job`. Each job starts in the remote login directory unless `cwd` is specified; `cd` and `export` do not persist across jobs. Interactive editors, password prompts and shell-only network appliances may not work with non-interactive exec. Unsupported authentication or a missing verified host key fails explicitly; the runtime does not bypass verification.
 
-Unknown or mutating commands require approval in a temporary in-chat card. This is a conservative convenience policy, not a shell sandbox or a guarantee that every apparently read-only command is harmless. The card shows the target, command and working directory. Rejecting a command does not execute it. Historical messages and model text are never interpreted as executable commands.
+By default, unknown or mutating commands require approval in a temporary in-chat card. This is a conservative convenience policy, not a shell sandbox or a guarantee that every apparently read-only command is harmless. The card shows the target, command and working directory. Rejecting a command does not execute it. Users can explicitly enable automatic execution for newly submitted tasks; in that mode the approval wait is skipped while the backend authorization and resource safeguards remain active. Historical messages and model text are never interpreted as executable commands.
 
 ## Execution and recovery
 

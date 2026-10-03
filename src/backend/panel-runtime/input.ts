@@ -198,11 +198,20 @@ export function parseStartRuntime(raw: unknown): StartRuntimeInput {
     "INVALID_SSH_MODE",
     "SSH 执行方式无效",
   );
+  const approvalMode = optionsValue.approvalMode;
+  requireValue(
+    approvalMode === undefined ||
+      ["prompt", "auto"].includes(String(approvalMode)),
+    400,
+    "INVALID_APPROVAL_MODE",
+    "命令确认方式无效",
+  );
   const options: RuntimeOptions = {
     model: text(optionsValue.model, 160, true) || undefined,
     reasoningEffort: effort as RuntimeOptions["reasoningEffort"],
     skillIds: ids as string[] | undefined,
     sshMode: sshMode as RuntimeOptions["sshMode"],
+    approvalMode: approvalMode as RuntimeOptions["approvalMode"],
   };
   requireValue(
     options.sshMode !== "shared-terminal" ||

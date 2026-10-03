@@ -196,6 +196,40 @@ describe("runtime durability and lifecycle", () => {
     await finished(runtime, run);
     expect(jobs.start).not.toHaveBeenCalled();
   });
+  it("auto execution skips the approval wait but still rechecks authorization", async () => {
+    const jobs = fakeJobs();
+    const provider = model((n) =>
+      n === 0 ? tool("touch requested-file") : null,
+    );
+    const authorize = vi.fn(async () => {});
+    const runtime = new PanelRuntime(store(), jobs as unknown as RuntimeJobs, {
+      config: async () => config,
+      model: () => provider,
+      watchdog: () => new ProgressWatchdog(5, 0),
+    });
+    const request = input();
+    request.options.approvalMode = "auto";
+    const run = await runtime.start("alice", request, authorize);
+
+    await finished(runtime, run);
+
+    expect(runtime.store.run("alice", run.id).options.approvalMode).toBe(
+      "auto",
+    );
+    expect(jobs.start).toHaveBeenCalledTimes(1);
+    expect(jobs.start).toHaveBeenCalledWith(
+      "alice",
+      expect.objectContaining({ id: run.id }),
+      expect.objectContaining({
+        name: "run_command",
+        arguments: expect.objectContaining({ command: "touch requested-file" }),
+      }),
+      expect.any(AbortSignal),
+      true,
+    );
+    expect(authorize.mock.calls.length).toBeGreaterThanOrEqual(3);
+  });
+
   it("waits for explicit approval and rechecks authorization after waiting", async () => {
     const jobs = fakeJobs();
     const provider = model((n) =>

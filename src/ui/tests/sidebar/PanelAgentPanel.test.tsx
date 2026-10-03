@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Tab } from "@/types/ui-types";
+import type { PanelRuntimeBridge } from "@/sidebar/PanelRuntimeBridge";
 
 const panelAgentApi = vi.hoisted(() => ({
   getPanelAgentSettings: vi.fn(),
@@ -463,6 +464,64 @@ describe("PanelAgentPanel", () => {
       expect(
         screen.getByRole("button", { name: "panelAgent.send" }),
       ).toHaveProperty("disabled", true),
+    );
+  });
+
+  it("persists automatic execution and sends it with backend runtime tasks", async () => {
+    const tab = terminalTab();
+    const start = vi.fn(async () => undefined);
+    const bridge: PanelRuntimeBridge = {
+      messages: [],
+      setMessages: vi.fn(),
+      working: false,
+      blocked: false,
+      initialTargetIds: ["tab-1"],
+      start,
+      stop: vi.fn(),
+      retry: vi.fn(),
+      newChat: vi.fn(),
+      clear: vi.fn(),
+      refreshHistory: vi.fn(),
+      history: null,
+      toolbar: null,
+      status: null,
+    };
+
+    render(
+      <PanelAgentPanel
+        terminalTabs={[tab]}
+        activeTabId="tab-1"
+        embedded
+        compact
+        runtimeBridge={bridge}
+      />,
+    );
+
+    await screen.findByPlaceholderText("panelAgent.chatPlaceholder");
+    const toggle = screen.getByTestId("panel-agent-auto-approval-toggle");
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(toggle);
+    expect(localStorage.getItem("panelAgentRuntimeApprovalMode")).toBe("auto");
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.change(
+      screen.getByPlaceholderText("panelAgent.chatPlaceholder"),
+      { target: { value: "restart nginx" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "panelAgent.send" }));
+
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+    expect(start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: "user",
+        content: "restart nginx",
+      }),
+      [expect.objectContaining({ targetId: "tab-1" })],
+      expect.objectContaining({
+        approvalMode: "auto",
+        sshMode: "mirror",
+      }),
     );
   });
 

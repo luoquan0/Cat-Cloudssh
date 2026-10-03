@@ -25,6 +25,7 @@ export type RuntimeMessage = {
   attachments?: RuntimeAttachment[];
 };
 export type RuntimeSshMode = "isolated" | "mirror" | "shared-terminal";
+export type RuntimeApprovalMode = "prompt" | "auto";
 export type RuntimeTarget = {
   targetId: string;
   hostId: number;
@@ -37,6 +38,7 @@ export type RuntimeOptions = {
   reasoningEffort?: "auto" | "low" | "medium" | "high";
   skillIds?: string[];
   sshMode?: RuntimeSshMode;
+  approvalMode?: RuntimeApprovalMode;
 };
 export type RuntimeStatus =
   | "queued"

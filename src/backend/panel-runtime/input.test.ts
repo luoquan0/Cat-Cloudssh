@@ -58,6 +58,26 @@ describe("panel runtime input validation", () => {
     ).toThrow("共享当前 SSH 需要选择一个已连接终端");
   });
 
+  it("accepts auto execution mode and rejects unknown approval modes", () => {
+    const base = request({
+      id: "message_approval_123",
+      role: "user",
+      content: "restart nginx",
+    });
+    const parsed = parseStartRuntime({
+      ...base,
+      options: { approvalMode: "auto" },
+    });
+    expect(parsed.options.approvalMode).toBe("auto");
+
+    expect(() =>
+      parseStartRuntime({
+        ...base,
+        options: { approvalMode: "always-trust" },
+      }),
+    ).toThrow("命令确认方式无效");
+  });
+
   it("rejects client-supplied tool calls with a dedicated error", () => {
     expect(() =>
       parseStartRuntime(

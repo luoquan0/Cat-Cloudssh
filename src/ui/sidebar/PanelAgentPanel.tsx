@@ -58,7 +58,10 @@ import {
   type PanelAgentToolCall,
 } from "@/api/panel-agent-api";
 import { MarkdownRenderer } from "@/features/file-manager/components/MarkdownRenderer";
-import type { RuntimeSshMode } from "@/types/panel-runtime";
+import type {
+  RuntimeApprovalMode,
+  RuntimeSshMode,
+} from "@/types/panel-runtime";
 import type { Tab } from "@/types/ui-types";
 
 const COMMAND_OBSERVE_DELAY_MS = 1_200;
@@ -67,6 +70,8 @@ const PANEL_AGENT_SELECTED_MODEL_STORAGE_KEY = "panelAgentSelectedModel";
 const PANEL_AGENT_MODEL_LIST_STORAGE_KEY = "panelAgentModelList";
 const PANEL_AGENT_THINKING_MODE_STORAGE_KEY = "panelAgentThinkingMode";
 const PANEL_AGENT_RUNTIME_SSH_MODE_STORAGE_KEY = "panelAgentRuntimeSshMode";
+const PANEL_AGENT_RUNTIME_APPROVAL_MODE_STORAGE_KEY =
+  "panelAgentRuntimeApprovalMode";
 const PANEL_AGENT_CONVERSATION_HISTORY_STORAGE_KEY =
   "panelAgentConversationHistory";
 const PANEL_AGENT_LIVE_CONVERSATION_STORAGE_KEY = "panelAgentLiveConversation";
@@ -96,6 +101,10 @@ const PANEL_AGENT_RUNTIME_SSH_MODES: RuntimeSshMode[] = [
   "mirror",
   "shared-terminal",
   "isolated",
+];
+const PANEL_AGENT_RUNTIME_APPROVAL_MODES: RuntimeApprovalMode[] = [
+  "prompt",
+  "auto",
 ];
 
 export type PanelAgentConversationAction = {
@@ -165,6 +174,26 @@ function readStoredRuntimeSshMode(): RuntimeSshMode {
 
 function writeStoredRuntimeSshMode(mode: RuntimeSshMode) {
   safeSetPanelAgentStorage(PANEL_AGENT_RUNTIME_SSH_MODE_STORAGE_KEY, mode);
+}
+
+function readStoredRuntimeApprovalMode(): RuntimeApprovalMode {
+  if (typeof window === "undefined") return "prompt";
+  try {
+    const value = window.localStorage.getItem(
+      PANEL_AGENT_RUNTIME_APPROVAL_MODE_STORAGE_KEY,
+    );
+    return PANEL_AGENT_RUNTIME_APPROVAL_MODES.includes(
+      value as RuntimeApprovalMode,
+    )
+      ? (value as RuntimeApprovalMode)
+      : "prompt";
+  } catch {
+    return "prompt";
+  }
+}
+
+function writeStoredRuntimeApprovalMode(mode: RuntimeApprovalMode) {
+  safeSetPanelAgentStorage(PANEL_AGENT_RUNTIME_APPROVAL_MODE_STORAGE_KEY, mode);
 }
 
 function panelModelForSettings(settings: PanelAgentSettings): string {
@@ -766,6 +795,8 @@ export function PanelAgentPanel({
   const [runtimeSshMode, setRuntimeSshMode] = useState<RuntimeSshMode>(
     readStoredRuntimeSshMode,
   );
+  const [runtimeApprovalMode, setRuntimeApprovalMode] =
+    useState<RuntimeApprovalMode>(readStoredRuntimeApprovalMode);
   const [attachments, setAttachments] = useState<PanelAgentChatAttachment[]>(
     [],
   );
@@ -910,6 +941,11 @@ export function PanelAgentPanel({
         : [...selectedTabIds][0];
       setSelectedTabIds(preferred ? new Set([preferred]) : new Set());
     }
+  }
+
+  function updateRuntimeApprovalMode(mode: RuntimeApprovalMode) {
+    setRuntimeApprovalMode(mode);
+    writeStoredRuntimeApprovalMode(mode);
   }
 
   function toggleTab(tabId: string) {
@@ -1105,6 +1141,7 @@ export function PanelAgentPanel({
           reasoningEffort: thinkingMode,
           skillIds: [...selectedSkillIds],
           sshMode: runtimeSshMode,
+          approvalMode: runtimeApprovalMode,
         });
       return;
     }
@@ -1632,6 +1669,50 @@ export function PanelAgentPanel({
         </div>
         {runtimeMode && (
           <div
+            data-testid="panel-agent-runtime-approval-mode"
+            className="space-y-2 rounded-2xl border border-border/50 bg-background/55 p-2.5 shadow-sm backdrop-blur"
+          >
+            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+              <ShieldCheck className="size-3" />
+              命令确认
+            </div>
+            <p className="text-[10px] leading-4 text-muted-foreground">
+              自动执行会跳过逐条命令确认；服务器授权、目标范围、超时、并发和循环保护仍然生效。对新发送的任务生效。
+            </p>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                type="button"
+                onClick={() => updateRuntimeApprovalMode("prompt")}
+                aria-pressed={runtimeApprovalMode === "prompt"}
+                className={`rounded-xl border p-2 text-left transition-colors ${runtimeApprovalMode === "prompt" ? "border-accent-brand bg-accent-brand/10 text-foreground" : "border-border/60 bg-background/55 text-muted-foreground hover:border-accent-brand/30"}`}
+              >
+                <span className="block text-[11px] font-medium">逐条确认</span>
+                <span className="mt-0.5 block text-[10px] leading-4">
+                  变更命令执行前等待你确认。
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => updateRuntimeApprovalMode("auto")}
+                aria-pressed={runtimeApprovalMode === "auto"}
+                className={`rounded-xl border p-2 text-left transition-colors ${runtimeApprovalMode === "auto" ? "border-amber-500/60 bg-amber-500/10 text-foreground" : "border-border/60 bg-background/55 text-muted-foreground hover:border-amber-500/30"}`}
+              >
+                <span className="block text-[11px] font-medium">自动执行</span>
+                <span className="mt-0.5 block text-[10px] leading-4">
+                  本浏览器保持开启，直到你手动关闭。
+                </span>
+              </button>
+            </div>
+            {runtimeApprovalMode === "auto" && (
+              <p className="flex items-start gap-1 text-[10px] leading-4 text-amber-600">
+                <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                自动执行已开启：Agent 生成的变更命令不会再逐条弹出确认。
+              </p>
+            )}
+          </div>
+        )}
+        {runtimeMode && (
+          <div
             data-testid="panel-agent-runtime-ssh-mode"
             className="space-y-2 rounded-2xl border border-border/50 bg-background/55 p-2.5 shadow-sm backdrop-blur"
           >
@@ -2056,6 +2137,34 @@ export function PanelAgentPanel({
             </Button>
             {renderModelSelector(compact)}
             {renderThinkingSelector(compact)}
+            {runtimeMode && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                data-testid="panel-agent-auto-approval-toggle"
+                className={`size-8 shrink-0 rounded-full ${runtimeApprovalMode === "auto" ? "bg-amber-500/15 text-amber-700 hover:bg-amber-500/20 dark:text-amber-400" : "bg-background/20 text-muted-foreground hover:bg-background/35"}`}
+                onClick={() =>
+                  updateRuntimeApprovalMode(
+                    runtimeApprovalMode === "auto" ? "prompt" : "auto",
+                  )
+                }
+                disabled={working}
+                aria-pressed={runtimeApprovalMode === "auto"}
+                aria-label={
+                  runtimeApprovalMode === "auto"
+                    ? "自动执行已开启，点击恢复逐条确认"
+                    : "开启自动执行，跳过逐条确认"
+                }
+                title={
+                  runtimeApprovalMode === "auto"
+                    ? "自动执行已开启"
+                    : "逐条确认已开启"
+                }
+              >
+                <ShieldCheck className="size-3.5" />
+              </Button>
+            )}
             {runtimeBridge?.toolbar}
             <Button
               type="button"

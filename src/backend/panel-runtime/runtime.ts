@@ -405,8 +405,12 @@ export class PanelRuntime {
             signal.throwIfAborted();
             const call = run.pending[0];
             const requiresApproval = needsApproval(call);
+            const autoApproved =
+              requiresApproval && run.options.approvalMode === "auto";
             const approved = requiresApproval
-              ? await this.waitApproval(owner, run, execution)
+              ? autoApproved
+                ? true
+                : await this.waitApproval(owner, run, execution)
               : false;
             signal.throwIfAborted();
             // Permission can change while the user is reading the approval card.
