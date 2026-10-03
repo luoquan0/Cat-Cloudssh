@@ -13,6 +13,7 @@ export type UpdatePhase =
   | "failed";
 
 export type UpdateMode = "auto" | "image" | "binary";
+export type UpdateVersionSource = "release" | "repository" | "unknown";
 
 export interface UpdateJob {
   id: string;
@@ -32,6 +33,9 @@ export interface UpdateStatus {
   currentVersion: string;
   latestVersion: string | null;
   status: "up_to_date" | "update_available" | "prerelease" | "unknown";
+  versionSource: UpdateVersionSource;
+  installable: boolean;
+  sourceUrl: string | null;
   releaseUrl: string | null;
   releaseName: string | null;
   publishedAt: string | null;
@@ -75,6 +79,11 @@ const updateStatuses = new Set<UpdateStatus["status"]>([
 ]);
 
 const updateModes = new Set<UpdateMode>(["auto", "image", "binary"]);
+const updateVersionSources = new Set<UpdateVersionSource>([
+  "release",
+  "repository",
+  "unknown",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -125,6 +134,13 @@ export function normalizeUpdateStatus(value: unknown): UpdateStatus {
     currentVersion: stringOr(source.currentVersion, "unknown"),
     latestVersion: nullableString(source.latestVersion),
     status,
+    versionSource: updateVersionSources.has(
+      source.versionSource as UpdateVersionSource,
+    )
+      ? (source.versionSource as UpdateVersionSource)
+      : "unknown",
+    installable: source.installable === true,
+    sourceUrl: nullableString(source.sourceUrl),
     releaseUrl: nullableString(source.releaseUrl),
     releaseName: nullableString(source.releaseName),
     publishedAt: nullableString(source.publishedAt),

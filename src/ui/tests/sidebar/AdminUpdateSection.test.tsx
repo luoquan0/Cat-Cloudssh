@@ -35,6 +35,10 @@ const idleStatus = {
   currentVersion: "2.6.0-cloudssh.16",
   latestVersion: "2.6.0-cloudssh.17",
   status: "update_available" as const,
+  versionSource: "release" as const,
+  installable: true,
+  sourceUrl:
+    "https://github.com/luoquan0/Cat-Cloudssh/releases/tag/v2.6.0-cloudssh.17",
   releaseUrl:
     "https://github.com/luoquan0/Cat-Cloudssh/releases/tag/v2.6.0-cloudssh.17",
   releaseName: "CloudSSH 2.6.0-cloudssh.17",
@@ -117,6 +121,38 @@ describe("AdminUpdateSection", () => {
     await waitFor(() =>
       expect(updateApi.getUpdateStatus).toHaveBeenCalledWith(true),
     );
+  });
+
+  it("没有 Release 时显示 main 版本但不开放一键更新", async () => {
+    updateApi.getUpdateStatus.mockResolvedValue({
+      ...idleStatus,
+      latestVersion: "2.6.0-cloudssh.18",
+      versionSource: "repository",
+      installable: false,
+      sourceUrl:
+        "https://github.com/luoquan0/Cat-Cloudssh/blob/main/package.json",
+      releaseUrl: null,
+      releaseName: null,
+      publishedAt: null,
+      updater: {
+        ...idleStatus.updater,
+        configured: true,
+        enabled: true,
+        reachable: true,
+        version: "1.0.0",
+        message: null,
+      },
+    });
+
+    render(<AdminUpdateSection open onToggle={() => undefined} />);
+
+    expect(
+      await screen.findByText("admin.repositoryVersionAvailable"),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "admin.updateNow" }),
+    ).toBeNull();
+    expect(updateApi.startCloudsshUpdate).not.toHaveBeenCalled();
   });
 
   it("确认后使用幂等键启动固定目标版本", async () => {

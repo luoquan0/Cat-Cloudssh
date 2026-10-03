@@ -211,11 +211,11 @@ const GITHUB_API_BASE = "https://api.github.com";
 const REPO_OWNER =
   process.env.CLOUDSSH_UPDATE_REPO_OWNER ||
   process.env.UPDATE_REPO_OWNER ||
-  "moeacgx";
+  "luoquan0";
 const REPO_NAME =
   process.env.CLOUDSSH_UPDATE_REPO_NAME ||
   process.env.UPDATE_REPO_NAME ||
-  "cloudssh";
+  "Cat-Cloudssh";
 
 async function fetchGitHubAPI<T>(
   endpoint: string,
@@ -265,6 +265,57 @@ async function fetchGitHubAPI<T>(
     });
     throw error;
   }
+}
+
+interface GitHubRepositoryFile {
+  content?: string;
+  encoding?: string;
+  html_url?: string;
+  sha?: string;
+}
+
+async function getRepositoryMainVersion(
+  forceRefresh = false,
+): Promise<{
+  version: string;
+  htmlUrl: string | null;
+  revision: string | null;
+}> {
+  const response = await fetchGitHubAPI<GitHubRepositoryFile>(
+    `/repos/${REPO_OWNER}/${REPO_NAME}/contents/package.json?ref=main`,
+    "main_package_json",
+    forceRefresh,
+  );
+  const file = response.data;
+  if (
+    file.encoding !== "base64" ||
+    typeof file.content !== "string" ||
+    file.content.length === 0
+  ) {
+    throw new Error("GitHub main package.json response is invalid");
+  }
+  const raw = Buffer.from(file.content.replace(/\s/g, ""), "base64").toString(
+    "utf8",
+  );
+  if (raw.length > 256 * 1024) {
+    throw new Error("GitHub main package.json is unexpectedly large");
+  }
+  const parsed = JSON.parse(raw) as { version?: unknown };
+  if (
+    typeof parsed.version !== "string" ||
+    parsed.version.trim().length === 0 ||
+    parsed.version.length > 128
+  ) {
+    throw new Error("GitHub main package.json has no valid version");
+  }
+  return {
+    version: parsed.version.trim(),
+    htmlUrl:
+      typeof file.html_url === "string"
+        ? file.html_url
+        : `https://github.com/${REPO_OWNER}/${REPO_NAME}/blob/main/package.json`,
+    revision: typeof file.sha === "string" ? file.sha : null,
+  };
 }
 
 app.use(bodyParser.json({ limit: "1gb" }));
@@ -331,22 +382,13 @@ app.get("/version", authenticateJWT, async (req, res) => {
   }
 
   try {
-    const cacheKey = "latest_release";
     const releaseData = await fetchGitHubAPI<GitHubRelease>(
       `/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`,
-      cacheKey,
+      "latest_release",
     );
-
     const rawTag = releaseData.data.tag_name || releaseData.data.name || "";
     const remoteVersion = versionFromReleaseTag(rawTag);
-
-    if (!remoteVersion) {
-      databaseLogger.warn("Remote version not found in GitHub response", {
-        operation: "version_check",
-        rawTag,
-      });
-      return res.status(401).send("Remote Version Not Found");
-    }
+    if (!remoteVersion) throw new Error("Remote Release version not found");
 
     const versionComparison = compareSemver(localVersion, remoteVersion);
     const status =
@@ -356,11 +398,13 @@ app.get("/version", authenticateJWT, async (req, res) => {
           ? "beta"
           : "requires_update";
 
-    const response = {
+    return res.json({
       status,
-      localVersion: localVersion,
+      localVersion,
       version: remoteVersion,
-      remoteVersion: remoteVersion,
+      remoteVersion,
+      versionSource: "release",
+      installable: !releaseData.data.draft && !releaseData.data.prerelease,
       latest_release: {
         tag_name: releaseData.data.tag_name,
         name: releaseData.data.name,
@@ -369,14 +413,39 @@ app.get("/version", authenticateJWT, async (req, res) => {
       },
       cached: releaseData.cached,
       cache_age: releaseData.cache_age,
-    };
-
-    res.json(response);
-  } catch (err) {
-    databaseLogger.error("Version check failed", err, {
-      operation: "version_check",
     });
-    res.status(500).send("Fetch Error");
+  } catch (releaseError) {
+    try {
+      const repository = await getRepositoryMainVersion();
+      const versionComparison = compareSemver(localVersion, repository.version);
+      const status =
+        versionComparison === null || versionComparison === 0
+          ? "up_to_date"
+          : versionComparison > 0
+            ? "beta"
+            : "requires_update";
+      return res.json({
+        status,
+        localVersion,
+        version: repository.version,
+        remoteVersion: repository.version,
+        versionSource: "repository",
+        installable: false,
+        repository: {
+          html_url: repository.htmlUrl,
+          revision: repository.revision,
+        },
+        latest_release: null,
+        cached: false,
+      });
+    } catch (repositoryError) {
+      databaseLogger.error("Version check failed", repositoryError, {
+        operation: "version_check",
+        releaseError:
+          releaseError instanceof Error ? releaseError.message : "unknown",
+      });
+      return res.status(500).send("Fetch Error");
+    }
   }
 });
 
@@ -477,6 +546,8 @@ app.use(
           options?.forceRefresh === true,
         )
       ).data,
+    getRepositoryVersion: async (options) =>
+      getRepositoryMainVersion(options?.forceRefresh === true),
     getReleaseByTag: async (tag) =>
       (
         await fetchGitHubAPI<GitHubRelease>(

@@ -12,6 +12,7 @@ https://youtu.be/g0QjNdV3YYY
 
 <!-- UPDATE_LOG -->
 
+- Added repository fallback version checks: when no formal GitHub Release exists, the admin update panel reads the fixed Cat-Cloudssh main branch version, clearly marks it as non-installable, and keeps one-click updating disabled until verified Release artifacts exist.
 - Added three Panel Agent SSH execution modes: independent execution with read-only terminal mirroring (default), a single-target shared live SSH/PTTY mode with an exclusive server-side Agent write lease, and fully isolated backend execution.
 - Added Agent `platform` sessions that keep SSH running through the CloudSSH panel without requiring tmux, while retaining tmux mode for recovery across CloudSSH restarts.
 - Added browser attachment to the exact Agent platform terminal, including shared output, single-writer lease takeover, resize, and Agent runtime labels in the connections list.

@@ -40,6 +40,13 @@ export interface UpdateRouteDependencies {
   getLatestRelease: (options?: {
     forceRefresh?: boolean;
   }) => Promise<GitHubRelease>;
+  getRepositoryVersion?: (options?: {
+    forceRefresh?: boolean;
+  }) => Promise<{
+    version: string;
+    htmlUrl: string | null;
+    revision: string | null;
+  }>;
   getReleaseByTag: (tag: string) => Promise<GitHubRelease>;
 }
 
@@ -231,10 +238,26 @@ export function createUpdateRoutes(
   router.get("/status", async (req, res) => {
     const currentVersion = dependencies.resolveLocalVersion() || "unknown";
     const updater = await getUpdaterStatus();
+    const forceRefresh = req.query.refresh === "true";
+    const updaterPayload = {
+      configured: updater.configured,
+      enabled: updater.available && updater.enabled !== false,
+      reachable: updater.available,
+      version: updater.updaterVersion || null,
+      canRollback: updater.canRollback === true,
+      message: updater.message || null,
+      mode: updater.updateMode || "auto",
+      supportedModes: updater.supportedModes || ["auto", "image", "binary"],
+      activeSource: updater.activeSource || "image",
+      restartRequired: updater.restartRequired === true,
+    };
+    const activeJob = publicJob(
+      updater.operation,
+      updater.previous?.version || null,
+    );
+
     try {
-      const latest = await dependencies.getLatestRelease({
-        forceRefresh: req.query.refresh === "true",
-      });
+      const latest = await dependencies.getLatestRelease({ forceRefresh });
       const latestVersion = versionFromReleaseTag(latest.tag_name);
       const comparison = dependencies.compareVersions(
         currentVersion,
@@ -251,55 +274,73 @@ export function createUpdateRoutes(
               : comparison < 0
                 ? "update_available"
                 : "up_to_date",
+        versionSource: "release",
+        installable:
+          Boolean(latestVersion) && !latest.draft && !latest.prerelease,
+        sourceUrl: latest.html_url,
         releaseUrl: latest.html_url,
         releaseName: latest.name || latest.tag_name,
         publishedAt: latest.published_at,
-        updater: {
-          configured: updater.configured,
-          enabled: updater.available && updater.enabled !== false,
-          reachable: updater.available,
-          version: updater.updaterVersion || null,
-          canRollback: updater.canRollback === true,
-          message: updater.message || null,
-          mode: updater.updateMode || "auto",
-          supportedModes: updater.supportedModes || ["auto", "image", "binary"],
-          activeSource: updater.activeSource || "image",
-          restartRequired: updater.restartRequired === true,
-        },
-        activeJob: publicJob(
-          updater.operation,
-          updater.previous?.version || null,
-        ),
+        updater: updaterPayload,
+        activeJob,
         checkedAt: new Date().toISOString(),
       });
-    } catch (error) {
-      apiLogger.warn("Failed to load CloudSSH release metadata", {
-        operation: "cloudssh_update_status_release_failed",
-        error: error instanceof Error ? error.message : "unknown",
+    } catch (releaseError) {
+      apiLogger.info("No usable CloudSSH Release metadata; checking main", {
+        operation: "cloudssh_update_status_repository_fallback",
+        error:
+          releaseError instanceof Error ? releaseError.message : "unknown",
       });
+
+      if (dependencies.getRepositoryVersion) {
+        try {
+          const repository = await dependencies.getRepositoryVersion({
+            forceRefresh,
+          });
+          const latestVersion = repository.version.trim();
+          const comparison = dependencies.compareVersions(
+            currentVersion,
+            latestVersion || undefined,
+          );
+          if (latestVersion && comparison !== null) {
+            return res.json({
+              currentVersion,
+              latestVersion,
+              status: comparison < 0 ? "update_available" : "up_to_date",
+              versionSource: "repository",
+              installable: false,
+              sourceUrl: repository.htmlUrl,
+              releaseUrl: null,
+              releaseName: null,
+              publishedAt: null,
+              updater: updaterPayload,
+              activeJob,
+              checkedAt: new Date().toISOString(),
+            });
+          }
+        } catch (repositoryError) {
+          apiLogger.warn("Failed to load CloudSSH main-branch version", {
+            operation: "cloudssh_update_status_repository_failed",
+            error:
+              repositoryError instanceof Error
+                ? repositoryError.message
+                : "unknown",
+          });
+        }
+      }
+
       return res.json({
         currentVersion,
         latestVersion: null,
         status: "unknown",
+        versionSource: "unknown",
+        installable: false,
+        sourceUrl: null,
         releaseUrl: null,
         releaseName: null,
         publishedAt: null,
-        updater: {
-          configured: updater.configured,
-          enabled: updater.available && updater.enabled !== false,
-          reachable: updater.available,
-          version: updater.updaterVersion || null,
-          canRollback: updater.canRollback === true,
-          message: updater.message || null,
-          mode: updater.updateMode || "auto",
-          supportedModes: updater.supportedModes || ["auto", "image", "binary"],
-          activeSource: updater.activeSource || "image",
-          restartRequired: updater.restartRequired === true,
-        },
-        activeJob: publicJob(
-          updater.operation,
-          updater.previous?.version || null,
-        ),
+        updater: updaterPayload,
+        activeJob,
         checkedAt: new Date().toISOString(),
       });
     }

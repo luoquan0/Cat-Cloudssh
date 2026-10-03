@@ -36,6 +36,9 @@ describe("CloudSSH 在线更新 API", () => {
 
     await expect(getUpdateStatus()).resolves.toMatchObject({
       currentVersion: "2.6.0-cloudssh.28",
+      versionSource: "unknown",
+      installable: false,
+      sourceUrl: null,
       updater: {
         configured: false,
         enabled: false,

@@ -196,9 +196,12 @@ export function AdminUpdateSection({
     updater?.supportedModes && updater.supportedModes.length > 0
       ? updater.supportedModes
       : (["auto", "image", "binary"] satisfies UpdateMode[]);
+  const installable =
+    status?.installable ?? Boolean(status?.releaseUrl);
   const canUpdate =
     status?.status === "update_available" &&
     !!status?.latestVersion &&
+    installable &&
     updater?.enabled === true &&
     !isRunning(activeJob);
 
@@ -229,7 +232,11 @@ export function AdminUpdateSection({
             )}
             {status?.status === "up_to_date" && (
               <div className="text-[10px] text-emerald-600">
-                {t("admin.updateUpToDate")}
+                {t(
+                  status.versionSource === "repository"
+                    ? "admin.updateRepositoryUpToDate"
+                    : "admin.updateUpToDate",
+                )}
               </div>
             )}
             {status?.releaseUrl && (
@@ -255,6 +262,42 @@ export function AdminUpdateSection({
             {t("admin.checkUpdates")}
           </Button>
         </div>
+
+        {status?.versionSource === "repository" &&
+          status.latestVersion && (
+            <Alert className="border-sky-500/40 bg-sky-500/5">
+              <ShieldCheck className="size-4 text-sky-600" />
+              <AlertTitle className="text-xs">
+                {t(
+                  status.status === "update_available"
+                    ? "admin.repositoryVersionAvailable"
+                    : "admin.repositoryVersionChecked",
+                )}
+              </AlertTitle>
+              <AlertDescription className="text-[10px] text-muted-foreground">
+                {t(
+                  status.status === "update_available"
+                    ? "admin.repositoryVersionAvailableDesc"
+                    : "admin.repositoryVersionCheckedDesc",
+                  { version: status.latestVersion },
+                )}
+                {status.sourceUrl && (
+                  <>
+                    {" "}
+                    <a
+                      href={status.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-accent-brand hover:underline"
+                    >
+                      {t("admin.viewRepositoryVersion")}
+                      <ExternalLink className="size-2.5" />
+                    </a>
+                  </>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
 
         {updater && (
           <div className="flex items-start justify-between gap-3 border-y border-border py-2">

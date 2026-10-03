@@ -52,6 +52,8 @@ async function listen(options?: {
   interactive?: boolean;
   pendingTOTP?: boolean;
   apiKey?: boolean;
+  releaseUnavailable?: boolean;
+  repositoryVersion?: string;
 }) {
   const app = express();
   app.use(express.json());
@@ -74,22 +76,31 @@ async function listen(options?: {
         });
         next();
       },
-      repositoryOwner: "moeacgx",
-      repositoryName: "cloudssh",
+      repositoryOwner: "luoquan0",
+      repositoryName: "Cat-Cloudssh",
       resolveLocalVersion: () => "2.6.0-cloudssh.16",
       compareVersions: (left, right) =>
         left === right ? 0 : String(left) < String(right) ? -1 : 1,
-      getLatestRelease: async () => ({
-        id: 17,
-        tag_name: "release-2.6.0-cloudssh.17-tag",
-        name: "CloudSSH 17",
-        body: "release",
-        published_at: "2026-08-02T00:00:00.000Z",
-        html_url:
-          "https://github.com/luoquan0/Cat-Cloudssh/releases/tag/release-2.6.0-cloudssh.17-tag",
-        assets: [],
-        prerelease: false,
-        draft: false,
+      getLatestRelease: async () => {
+        if (options?.releaseUnavailable) throw new Error("no release");
+        return {
+          id: 17,
+          tag_name: "release-2.6.0-cloudssh.17-tag",
+          name: "CloudSSH 17",
+          body: "release",
+          published_at: "2026-08-02T00:00:00.000Z",
+          html_url:
+            "https://github.com/luoquan0/Cat-Cloudssh/releases/tag/release-2.6.0-cloudssh.17-tag",
+          assets: [],
+          prerelease: false,
+          draft: false,
+        };
+      },
+      getRepositoryVersion: async () => ({
+        version: options?.repositoryVersion || "2.6.0-cloudssh.18",
+        htmlUrl:
+          "https://github.com/luoquan0/Cat-Cloudssh/blob/main/package.json",
+        revision: "main-package-sha",
       }),
       getReleaseByTag: async (tag) => {
         if (tag !== "release-2.6.0-cloudssh.17-tag") {
@@ -217,6 +228,8 @@ describe("管理员在线更新路由", () => {
       currentVersion: "2.6.0-cloudssh.16",
       latestVersion: "2.6.0-cloudssh.17",
       status: "update_available",
+      versionSource: "release",
+      installable: true,
       updater: {
         configured: true,
         enabled: true,
@@ -229,6 +242,27 @@ describe("管理员在线更新路由", () => {
         restartRequired: false,
       },
       activeJob: null,
+    });
+  });
+
+  it("没有 Release 时回退检查 main 分支版本但不开放一键安装", async () => {
+    const base = await listen({
+      releaseUnavailable: true,
+      repositoryVersion: "2.6.0-cloudssh.18",
+    });
+    const response = await requestLocal(
+      `${base}/admin/updates/status?refresh=true`,
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      currentVersion: "2.6.0-cloudssh.16",
+      latestVersion: "2.6.0-cloudssh.18",
+      status: "update_available",
+      versionSource: "repository",
+      installable: false,
+      sourceUrl:
+        "https://github.com/luoquan0/Cat-Cloudssh/blob/main/package.json",
+      releaseUrl: null,
     });
   });
 

@@ -4,6 +4,12 @@ CloudSSH 使用容器内自更新，不需要独立更新容器，也不挂载 D
 Socket。正式版本从公开 GitHub Release 匿名下载，运行包在激活前必须通过固定仓库、
 版本、架构、文件名、大小和 SHA-256 校验。
 
+管理面板的“检查更新”与“安装更新”是两条不同的信任路径。检查更新会优先读取正式
+GitHub Release；如果仓库尚未创建任何 Release，则自动回退读取固定
+`luoquan0/Cat-Cloudssh` 的 `main/package.json` 版本，因此仍能提示已有新版源码/镜像。
+这种回退结果会标记为“仓库版本”且不可一键安装，不会绕过 Release 清单、摘要和运行包
+校验链。等正式 Release 出现后，面板会自动恢复 Release 来源并开放符合条件的一键更新。
+
 ## 更新方式
 
 管理员可以在“管理 -> 版本”切换三种方式：
@@ -73,7 +79,7 @@ Socket。正式版本从公开 GitHub Release 匿名下载，运行包在激活�
 {
   "schemaVersion": 3,
   "channel": "stable",
-  "version": "2.6.0-cloudssh.61",
+  "version": "2.6.0-cloudssh.62",
   "image": "ghcr.io/luoquan0/cloudssh",
   "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "revision": "0123456789abcdef0123456789abcdef01234567",
@@ -115,7 +121,7 @@ cd /opt/cloudssh
 sh scripts/cloudssh-host-image-update.sh
 
 # 固定升级到指定正式版本
-sh scripts/cloudssh-host-image-update.sh 2.6.0-cloudssh.61
+sh scripts/cloudssh-host-image-update.sh 2.6.0-cloudssh.62
 ```
 
 脚本需要 `curl`、`docker`、`gzip` 与 `sha256sum`（或 `shasum`），并且要求当前镜像仍在本机，
