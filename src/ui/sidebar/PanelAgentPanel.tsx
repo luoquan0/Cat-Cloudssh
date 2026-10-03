@@ -910,6 +910,11 @@ export function PanelAgentPanel({
     }
   }, []);
 
+  const followLatestMessageIntoView = useCallback(() => {
+    if (!stickToBottomRef.current) return;
+    scrollLatestMessageIntoView();
+  }, [scrollLatestMessageIntoView]);
+
   function handleMessageListScroll() {
     const messageList = messageListRef.current;
     if (!messageList) return;
@@ -925,18 +930,18 @@ export function PanelAgentPanel({
   useEffect(() => {
     if (historyOpen || !stickToBottomRef.current) return;
     const firstFrame = window.requestAnimationFrame(
-      scrollLatestMessageIntoView,
+      followLatestMessageIntoView,
     );
     const secondFrame = window.requestAnimationFrame(() =>
-      window.requestAnimationFrame(scrollLatestMessageIntoView),
+      window.requestAnimationFrame(followLatestMessageIntoView),
     );
-    const lateLayout = window.setTimeout(scrollLatestMessageIntoView, 120);
+    const lateLayout = window.setTimeout(followLatestMessageIntoView, 120);
     return () => {
       window.cancelAnimationFrame(firstFrame);
       window.cancelAnimationFrame(secondFrame);
       window.clearTimeout(lateLayout);
     };
-  }, [historyOpen, messages, scrollLatestMessageIntoView, working]);
+  }, [followLatestMessageIntoView, historyOpen, messages, working]);
 
   function updateSelectedModel(model: string) {
     setSelectedModel(model);

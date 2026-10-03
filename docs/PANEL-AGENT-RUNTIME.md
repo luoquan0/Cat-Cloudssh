@@ -1,4 +1,8 @@
-# Panel Agent runtime - 2.6.0-cloudssh.65
+# Panel Agent runtime - 2.6.0-cloudssh.66
+
+## .66 stable manual-scroll behavior
+
+Long Agent chats now preserve an explicit manual upward scroll even if a previously scheduled layout-follow callback is still pending. Delayed animation-frame and timeout follow-ups re-check the live stick-to-bottom state before moving the viewport, so the **回到最新消息** button remains available until the user explicitly returns to the bottom or sends a new message.
 
 ## .65 release-ready legacy cache cleanup and long-chat scrolling
 
