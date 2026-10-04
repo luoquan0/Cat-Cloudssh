@@ -1,4 +1,4 @@
-# Panel Agent runtime - 2.6.0-cloudssh.66
+# Panel Agent runtime - 2.6.0-cloudssh.67
 
 ## .66 stable manual-scroll behavior
 

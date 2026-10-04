@@ -55,6 +55,7 @@ https://youtu.be/g0QjNdV3YYY
 
 <!-- BUG_FIXES -->
 
+- Fixed in-app update and rollback buttons crashing on older browsers/WebViews without `crypto.randomUUID()` by adding `getRandomValues` and backend-safe string fallbacks for idempotency keys.
 - Fixed long Agent chats occasionally snapping back to the newest message after the user had manually scrolled upward because a previously scheduled auto-follow callback could still fire.
 - Fixed Panel Agent messages failing to send in browsers or embedded WebViews without `crypto.randomUUID()` because the legacy message-ID fallback contained characters rejected by the backend; user message IDs now use a backend-safe fallback and validation errors identify the actual failure.
 - Fixed opening a new Panel Agent conversation repeatedly replaying the same conversation action after the inner chat panel remounted, which caused React error #185 (maximum update depth exceeded).
