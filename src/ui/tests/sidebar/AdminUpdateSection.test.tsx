@@ -94,17 +94,14 @@ afterEach(() => {
 describe("AdminUpdateSection", () => {
   it("没有 randomUUID 时仍生成后端可接受的更新幂等键", () => {
     let seed = 0;
-    const key = newIdempotencyKey(
-      "cloudssh-update",
-      {
-        getRandomValues: ((array: Uint8Array) => {
-          for (let index = 0; index < array.length; index += 1) {
-            array[index] = (seed++ * 31 + 11) & 0xff;
-          }
-          return array;
-        }) as Crypto["getRandomValues"],
-      } as Pick<Crypto, "randomUUID" | "getRandomValues">,
-    );
+    const key = newIdempotencyKey("cloudssh-update", {
+      getRandomValues: ((array: Uint8Array) => {
+        for (let index = 0; index < array.length; index += 1) {
+          array[index] = (seed++ * 31 + 11) & 0xff;
+        }
+        return array;
+      }) as Crypto["getRandomValues"],
+    } as Pick<Crypto, "randomUUID" | "getRandomValues">);
 
     expect(key).toMatch(
       /^cloudssh-update-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/,
