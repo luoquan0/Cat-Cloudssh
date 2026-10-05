@@ -104,7 +104,7 @@ function pendingRequestInput(
   };
 }
 
-test("Skill 地址仅允许 HTTPS 和本机 HTTP", () => {
+test("Skill 地址默认要求 HTTPS，显式 opt-in 后允许受信任内网 HTTP", () => {
   assert.equal(
     normalizeBaseUrl("https://ssh.example.com/"),
     "https://ssh.example.com/agent/v1",
@@ -113,7 +113,80 @@ test("Skill 地址仅允许 HTTPS 和本机 HTTP", () => {
     normalizeBaseUrl("http://127.0.0.1:18081"),
     "http://127.0.0.1:18081/agent/v1",
   );
-  assert.throws(() => normalizeBaseUrl("http://203.0.113.10:18080"), /HTTPS/);
+  assert.throws(
+    () => normalizeBaseUrl("http://192.168.1.10:18080"),
+    /--allow-http/,
+  );
+  assert.equal(
+    normalizeBaseUrl("http://192.168.1.10:18080", { allowHttp: true }),
+    "http://192.168.1.10:18080/agent/v1",
+  );
+});
+
+test("HTTP profile 保存 allowHttp 后后续客户端可直接复用，旧 profile 保持兼容", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "cloudssh-http-profile-"));
+  try {
+    const profiles = new ProfileStore(directory);
+    await profiles.write({
+      baseUrl: "http://192.168.1.10:2244",
+      allowHttp: true,
+      deviceId: "device-test",
+      publicKey: "public-key",
+      fingerprint: "fingerprint",
+      keyId: "default-agent-device-key",
+      retiredKeyIds: [],
+    });
+    const profile = await profiles.read();
+    assert.equal(profile.allowHttp, true);
+    assert.equal(profile.baseUrl, "http://192.168.1.10:2244/agent/v1");
+
+    const identity = testIdentity();
+    let requestedUrl = "";
+    const client = new CloudSshClient(
+      profile.baseUrl,
+      new MemorySecretStore(identity),
+      async (url) => {
+        requestedUrl = String(url);
+        return new Response(JSON.stringify({ servers: [] }));
+      },
+      new PendingRequestStore(directory),
+      { allowHttp: profile.allowHttp },
+    );
+    assert.deepEqual(await client.listServers(), []);
+    assert.equal(
+      requestedUrl,
+      "http://192.168.1.10:2244/agent/v1/servers",
+    );
+
+    await writeFile(
+      profiles.file,
+      JSON.stringify({
+        baseUrl: "https://ssh.example.com",
+        deviceId: "legacy-device",
+        keyId: "default-agent-device-key",
+      }),
+    );
+    const legacyHttps = await profiles.read();
+    assert.equal(legacyHttps.allowHttp, false);
+    assert.equal(legacyHttps.baseUrl, "https://ssh.example.com/agent/v1");
+
+    await writeFile(
+      profiles.file,
+      JSON.stringify({
+        baseUrl: "http://127.0.0.1:2244",
+        deviceId: "legacy-local-device",
+        keyId: "default-agent-device-key",
+      }),
+    );
+    const legacyLocalHttp = await profiles.read();
+    assert.equal(legacyLocalHttp.allowHttp, false);
+    assert.equal(
+      legacyLocalHttp.baseUrl,
+      "http://127.0.0.1:2244/agent/v1",
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("Skill 按 hostId 去重跨项目入口且只在物理主机不同时询问", async () => {
