@@ -64,6 +64,7 @@ description: 通过自带的零 npm 依赖脚本和已审批的 Ed25519 设备�
    不要要求用户猜测内部 ID，也不要询问 IP、SSH 用户名、密码或私钥。
 
 平台传输分三种：
+
 - **公网**：必须使用 HTTPS，不要使用 `--allow-http`。
 - **受信任内网**：服务端管理员必须同时设置 `CLOUDSSH_AGENT_ALLOW_HTTP=true`
   和 `CLOUDSSH_AGENT_HTTP_ALLOWED_CIDRS`，客户端首次登录再显式使用
