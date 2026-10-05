@@ -23,6 +23,16 @@ description: 通过自带的零 npm 依赖脚本和已审批的 Ed25519 设备�
    node <skill目录>/scripts/cloudssh.mjs auth login --url https://ssh.example.com
    ```
 
+   受信任内网如果由管理员显式开启 Agent HTTP，也可以：
+
+   ```text
+   node <skill目录>/scripts/cloudssh.mjs auth login --url http://192.168.222.150:2244 --allow-http
+   ```
+
+   也可设置 `CLOUDSSH_ALLOW_HTTP=true`；命令行 `--allow-http` 优先。该选择会
+   安全写入 profile，后续 `auth status`、`servers`、`jobs`、`sessions`
+   和 `files` 命令不需要重复传入 `--allow-http`。
+
    脚本会在本机生成 Ed25519 设备私钥，写入系统安全存储，并显示一次性设备码、
    设备名称和公钥指纹。让用户在 CloudSSH 网页“Agent 接入”中核对信息并批准。
    一台设备首次批准一次即可，后续请求自动签名，不会逐次弹出审批。
@@ -53,7 +63,16 @@ description: 通过自带的零 npm 依赖脚本和已审批的 Ed25519 设备�
 
    不要要求用户猜测内部 ID，也不要询问 IP、SSH 用户名、密码或私钥。
 
-平台地址必须使用 HTTPS；只有 `localhost`、`127.0.0.1` 和 `::1` 允许 HTTP。本地测试可先建立 SSH 隧道，再把 `http://127.0.0.1:<端口>` 作为平台地址。
+平台传输分三种：
+- **公网**：必须使用 HTTPS，不要使用 `--allow-http`。
+- **受信任内网**：服务端管理员必须同时设置 `CLOUDSSH_AGENT_ALLOW_HTTP=true`
+  和 `CLOUDSSH_AGENT_HTTP_ALLOWED_CIDRS`，客户端首次登录再显式使用
+  `--allow-http`（或 `CLOUDSSH_ALLOW_HTTP=true`）。
+- **localhost**：`localhost`、`127.0.0.1` 和 `::1` 继续兼容 HTTP，不需要 opt-in。
+
+HTTP opt-in 只改变传输层准入，不改变 Ed25519 设备签名、nonce 防重放、scope、
+项目隔离、凭据隔离、幂等键或审计。不要通过伪造 `X-Forwarded-Proto:https`
+或 SSH 隧道绕过传输策略。
 
 ## 项目、分类与主机
 
@@ -74,7 +93,7 @@ node <脚本> servers create --project <projectId> --folder "生产 / 数据库"
 - 不使用 `--auth-type agent`。网页 SSH Agent 依赖浏览器所在设备，CloudSSH
   后台无法借用该设备的本地 Agent，因此这种主机不能供 Skill 持续连接。
 - 如果必须导入本机已有的密码或私钥，只允许把文件路径传给 `--password-file`、
-  `--key-file` 或 `--key-password-file`。脚本在内存中读取并通过 HTTPS 发送，
+  `--key-file` 或 `--key-password-file`。脚本在内存中读取并通过已配置的 CloudSSH 传输发送，
   不打印内容，也不写入待确认请求文件。不要先用其他命令读取文件内容，不要让
   用户把密码或私钥粘贴进对话；不得使用已禁用的 `--password`、`--key`、
   `--key-password` 参数。
