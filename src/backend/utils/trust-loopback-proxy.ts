@@ -73,7 +73,10 @@ function parsedAddress(address: string | undefined) {
   return null;
 }
 
-function addressMatchesCidr(address: string | undefined, cidr: string): boolean {
+function addressMatchesCidr(
+  address: string | undefined,
+  cidr: string,
+): boolean {
   const parsed = parsedAddress(address);
   if (!parsed) return false;
   const [networkRaw, prefixRaw] = cidr.trim().split("/");
@@ -104,7 +107,9 @@ export function isAddressAllowedByCidrs(
   address: string | undefined,
   cidrs: string | undefined,
 ): boolean {
-  return configuredCidrs(cidrs).some((cidr) => addressMatchesCidr(address, cidr));
+  return configuredCidrs(cidrs).some((cidr) =>
+    addressMatchesCidr(address, cidr),
+  );
 }
 
 export function isLoopbackAddress(address: string | undefined): boolean {
@@ -114,7 +119,9 @@ export function isLoopbackAddress(address: string | undefined): boolean {
   return /^127(?:\.\d{1,3}){3}$/.test(normalized);
 }
 
-function firstHeaderValue(value: string | string[] | undefined): string | undefined {
+function firstHeaderValue(
+  value: string | string[] | undefined,
+): string | undefined {
   const raw = Array.isArray(value) ? value[0] : value;
   return raw?.split(",")[0]?.trim().toLowerCase();
 }
