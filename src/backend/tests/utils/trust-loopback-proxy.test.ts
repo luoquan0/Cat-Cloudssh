@@ -43,9 +43,7 @@ describe("trustLoopbackProxy", () => {
     };
     expect(trustLoopbackProxy("172.18.0.1", 0, environment)).toBe(true);
     expect(trustLoopbackProxy("::ffff:172.18.0.1", 0, environment)).toBe(true);
-    expect(
-      trustLoopbackProxy("2001:db8:1234::10", 0, environment),
-    ).toBe(true);
+    expect(trustLoopbackProxy("2001:db8:1234::10", 0, environment)).toBe(true);
     expect(trustLoopbackProxy("192.168.1.10", 0, environment)).toBe(false);
     expect(trustLoopbackProxy("172.18.0.1", 1, environment)).toBe(false);
   });
