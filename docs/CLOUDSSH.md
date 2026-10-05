@@ -15,7 +15,9 @@ Agent API。当前实现用于全新私有实例，不应直接覆盖现有 Term
   指定项目，并绑定 scope、有效期和并发上限；所选项目内全部服务器自动可用。
   审批后每个请求自动签名，不创建长期 Token，也不需要逐次批准。
 - Agent API 经主站 `/agent/v1` 暴露；内部监听 `127.0.0.1:30013`，不直接发布
-  明文端口。生产环境必须由 HTTPS 反向代理提供服务。
+  Agent 内部端口。生产环境默认仍要求 HTTPS；只有管理员显式开启
+  `CLOUDSSH_AGENT_ALLOW_HTTP=true` 且请求来源命中
+  `CLOUDSSH_AGENT_HTTP_ALLOWED_CIDRS` 时，才允许受信任内网 HTTP。
 - 项目服务器列表只包含连接目标和状态，不包含用户名、认证方式、密码、私钥
   或凭据 ID。
 - 只有实例管理员可在用户管理中查看、复制或导出目标用户的明文密码与私钥；
@@ -46,6 +48,41 @@ WebAuthn 后，不带 `ALLOW_REGISTRATION=true` 重新创建容器；编排默�
 直接连接 CloudSSH 的代理地址或最小网段；多个不连续网段使用逗号分隔，最多
 64 个。启动脚本会逐项校验并去重，非可信来源伪造的 `X-Forwarded-Proto`、
 `X-Forwarded-Host` 和 `X-Forwarded-Port` 不会生效。
+
+### Agent 传输模式
+
+CloudSSH 正式支持三种 Agent 部署方式：
+
+1. **公网**：使用 HTTPS。默认安全策略就是此模式，不需要额外配置。
+2. **受信任内网 HTTP**：管理员必须显式设置：
+   ```ini
+   CLOUDSSH_AGENT_ALLOW_HTTP=true
+   CLOUDSSH_AGENT_HTTP_ALLOWED_CIDRS=192.168.0.0/16
+   ```
+   `CLOUDSSH_AGENT_HTTP_ALLOWED_CIDRS` 支持逗号分隔的 IPv4 / IPv6 CIDR。
+   如果仅设置 `CLOUDSSH_AGENT_ALLOW_HTTP=true` 而未设置 CIDR，生产环境仍会拒绝
+   非 localhost HTTP，不会默认开放公网来源。
+3. **localhost HTTP**：`localhost`、`127.0.0.1`、`::1` 保持兼容，无需开启
+   HTTP opt-in。
+
+Docker Compose 对应配置：
+
+```sh
+CLOUDSSH_AGENT_ALLOW_HTTP=true \
+CLOUDSSH_AGENT_HTTP_ALLOWED_CIDRS=192.168.0.0/16 \
+docker compose -f docker/docker-compose.cloudssh.yml up -d
+```
+
+`CLOUDSSH_TRUSTED_PROXY_CIDR` 只用于声明**真正的第一跳反向代理**，不要把普通
+客户端网段误配置为可信代理。Agent 传输检查会结合套接字来源地址、可信代理链和
+允许的 HTTP 来源 CIDR；不会把任意客户端提供的 `X-Forwarded-Proto:https`
+当成 HTTPS 证明。
+
+启用内网 HTTP 只改变传输层准入。Ed25519 Device Auth、signedHeaders、nonce
+防重放、scope、项目隔离、凭据隔离、Idempotency-Key、jobs、sessions、SFTP 和
+audit 规则全部保持不变。HTTP 本身不提供链路加密，因此只应在管理员控制的可信
+内网使用；公网仍应使用 HTTPS。
+
 容器内应用使用 UID/GID `1000:1000` 读取 Docker Secret，因此根密钥文件必须
 由该 UID/GID 持有并保持 `0600`；若日志提示凭据库锁定，应先检查这里，而不是
 把密钥改成全局可读。
@@ -164,11 +201,22 @@ https://github.com/luoquan0/Cat-Cloudssh/tree/main/skills/cloudssh-agent
 
 安装后重启 Codex。Skill 自带零 npm 依赖的脚本，只要求 Agent 主机具备
 Node.js 20 或更高版本，不需要 MCP、MCP 客户端、`npm install` 或项目构建。
-首次登录只需在交互式终端运行：
+首次登录只需在交互式终端运行。公网 HTTPS：
 
 ```sh
 node <已安装Skill目录>/scripts/cloudssh.mjs auth login --url https://ssh.example.com
 ```
+
+受信任内网 HTTP（服务端已经开启上述 opt-in）：
+
+```powershell
+node "$env:USERPROFILE\.agents\skills\cloudssh-agent\scripts\cloudssh.mjs" auth login --url http://192.168.222.150:2244 --allow-http
+```
+
+也可以在 Agent 主机设置 `CLOUDSSH_ALLOW_HTTP=true`。首次成功登录后，
+`allowHttp` 会随 `baseUrl` 保存到 profile，后续 `auth status`、`servers list`、
+`jobs run`、`sessions` 和 `files` 不需要重复传 `--allow-http`。旧 profile
+没有 `allowHttp` 字段时按 `false` 处理；原有 HTTPS 和 localhost HTTP 配置保持兼容。
 
 脚本显示设备码、设备名称和公钥指纹后，在网页“Agent 接入”中批准一次。
 Ed25519 设备私钥会保存到 Windows DPAPI、macOS Keychain 或 Linux Secret
@@ -267,7 +315,9 @@ Compose 更新。更新前必须生成并校验完整备份，详细安全边界
 1. 备份现有 Termix 数据卷，并执行一次隔离恢复。
 2. 以新数据卷启动 CloudSSH，创建团队和项目，再按项目范围审批 Agent 设备。
 3. 导入凭据，验证 Host Key，并分别测试网页 SSH、SFTP、持久会话和 Job API。
-4. 启用 HTTPS、邀请制注册和 MFA，再允许团队成员访问。
+4. 公网部署启用 HTTPS；若是隔离内网 Agent HTTP，则显式配置
+   `CLOUDSSH_AGENT_ALLOW_HTTP` 和最小化的 `CLOUDSSH_AGENT_HTTP_ALLOWED_CIDRS`。
+   同时保持邀请制注册和 MFA，再允许团队成员访问。
 5. 验证审计不含密码、私钥、设备码和完整签名。
 6. 新系统稳定后再轮换旧 SSH 凭据；不要提前删除 `llmwiki` 中的记录。
 

@@ -1017,7 +1017,8 @@ export function createAgentApp(dependencies: AgentRouterDependencies) {
   const activeFileUploadsByDevice = new Map<string, number>();
   let activeFileUploads = 0;
   app.disable("x-powered-by");
-  // Agent API 只接受本机反向代理提供的一跳客户端地址。
+  // Agent API 只信任回环或 CLOUDSSH_TRUSTED_PROXY_CIDR 明确声明的第一跳代理。
+  // HTTP 准入仍由 isAdministrativeTransportAllowed 独立校验来源 CIDR。
   app.set("trust proxy", trustLoopbackProxy);
   app.use(createCorsMiddleware());
   // 传输安全校验必须早于设备预认证和任何正文解析，避免在不安全连接上
@@ -1028,7 +1029,8 @@ export function createAgentApp(dependencies: AgentRouterDependencies) {
       return;
     }
     res.status(426).json({
-      error: "Agent API 在生产环境中必须使用 HTTPS",
+      error:
+        "Agent API 在生产环境中必须使用 HTTPS；受信任内网 HTTP 需由管理员显式启用并配置来源 CIDR",
       code: "HTTPS_REQUIRED",
     });
   });
