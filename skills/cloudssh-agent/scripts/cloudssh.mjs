@@ -69,11 +69,21 @@ export function configDirectory(environment = process.env) {
   );
 }
 
-export function normalizeBaseUrl(input) {
+function environmentFlagEnabled(value) {
+  return /^(?:1|true|yes|on)$/i.test(String(value ?? "").trim());
+}
+
+export function normalizeBaseUrl(input, options = {}) {
   const parsed = new URL(String(input).trim());
   const local = ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname);
-  if (parsed.protocol !== "https:" && !(local && parsed.protocol === "http:")) {
-    throw new Error("平台地址必须使用 HTTPS；仅本机地址允许 HTTP");
+  const allowHttp = options.allowHttp === true;
+  if (
+    parsed.protocol !== "https:" &&
+    !(parsed.protocol === "http:" && (local || allowHttp))
+  ) {
+    throw new Error(
+      "该 CloudSSH 地址使用明文 HTTP。\n如确认该地址位于受信任内网，请显式添加 --allow-http。\n公网环境请使用 HTTPS。",
+    );
   }
   parsed.username = "";
   parsed.password = "";
@@ -281,8 +291,10 @@ export class ProfileStore {
     if (typeof value.baseUrl !== "string") {
       throw new Error("CloudSSH 配置文件格式无效");
     }
+    const allowHttp = value.allowHttp === true;
     return {
-      baseUrl: normalizeBaseUrl(value.baseUrl),
+      baseUrl: normalizeBaseUrl(value.baseUrl, { allowHttp }),
+      allowHttp,
       deviceId: typeof value.deviceId === "string" ? value.deviceId : null,
       publicKey: typeof value.publicKey === "string" ? value.publicKey : null,
       fingerprint:
@@ -293,8 +305,10 @@ export class ProfileStore {
   }
 
   async write(profile) {
+    const allowHttp = profile.allowHttp === true;
     await writePrivateJson(this.file, {
-      baseUrl: normalizeBaseUrl(profile.baseUrl),
+      baseUrl: normalizeBaseUrl(profile.baseUrl, { allowHttp }),
+      allowHttp,
       deviceId: profile.deviceId,
       publicKey: profile.publicKey,
       fingerprint: profile.fingerprint,
@@ -1086,8 +1100,11 @@ export class CloudSshClient {
     identities,
     fetcher = fetch,
     pendingRequests = new PendingRequestStore(),
+    options = {},
   ) {
-    this.baseUrl = normalizeBaseUrl(baseUrl);
+    this.baseUrl = normalizeBaseUrl(baseUrl, {
+      allowHttp: options.allowHttp === true,
+    });
     this.identities = identities;
     this.fetcher = fetcher;
     this.pendingRequests = pendingRequests;
@@ -1933,12 +1950,18 @@ async function configuredRuntime() {
   if (!profile)
     throw new Error("尚未配置 CloudSSH，请先执行 auth login --url <地址>");
   return {
-    client: new CloudSshClient(profile.baseUrl, {
-      get: async () => ({
-        deviceId: profile.deviceId,
-        privateKey: await secrets.get(profile.keyId),
-      }),
-    }),
+    client: new CloudSshClient(
+      profile.baseUrl,
+      {
+        get: async () => ({
+          deviceId: profile.deviceId,
+          privateKey: await secrets.get(profile.keyId),
+        }),
+      },
+      fetch,
+      new PendingRequestStore(),
+      { allowHttp: profile.allowHttp === true },
+    ),
     state: new SessionStateStore(),
   };
 }
@@ -1949,7 +1972,17 @@ async function authCommand(action, flags) {
   const cleanups = new DeviceKeyCleanupStore();
   const state = new SessionStateStore();
   if (action === "login") {
-    const baseUrl = normalizeBaseUrl(stringFlag(flags, "url"));
+    if (
+      flags["allow-http"] !== undefined &&
+      flags["allow-http"] !== true
+    ) {
+      throw new Error("--allow-http 是布尔开关，不接受参数值");
+    }
+    const allowHttp =
+      flags["allow-http"] === true ||
+      (flags["allow-http"] === undefined &&
+        environmentFlagEnabled(process.env.CLOUDSSH_ALLOW_HTTP));
+    const baseUrl = normalizeBaseUrl(stringFlag(flags, "url"), { allowHttp });
     if (flags.token !== undefined) {
       throw new Error("--token 已移除，请使用设备码审批登录");
     }
@@ -2028,6 +2061,7 @@ async function authCommand(action, flags) {
       cleanups,
       {
         baseUrl,
+        allowHttp,
         deviceId: approved.deviceId,
         publicKey: publicKeyPem,
         fingerprint,
@@ -2450,8 +2484,10 @@ function print(value) {
 
 const HELP = `CloudSSH Skill CLI（无需 MCP 或仓库构建）
 
-auth login --url <https-url> [--name <设备名称>]
+auth login --url <url> [--allow-http] [--name <设备名称>]
                                     生成设备私钥并等待网页审批
+                                    非 localhost 的 HTTP 必须显式 --allow-http
+                                    也可使用 CLOUDSSH_ALLOW_HTTP=true
 auth status | logout
 projects list
 folders list --project <项目 ID>
