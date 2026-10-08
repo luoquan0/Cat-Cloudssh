@@ -23,15 +23,6 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
       - name: Repair staged patch syntax
         run: |
           python3 - <<'PY'
@@ -79,6 +70,15 @@ jobs:
           path.write_text("".join(output))
           PY
           node --check scripts/apply-cloudssh-69.mjs
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Apply CloudSSH 69 patch
         run: node scripts/apply-cloudssh-69.mjs
