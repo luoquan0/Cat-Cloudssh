@@ -32,6 +32,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Repair staged patch syntax
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("scripts/apply-cloudssh-69.mjs")
+          value = path.read_text()
+          old = '    const cidr = `${address}/${prefix}`;'
+          new = '    const cidr = address + "/" + prefix;'
+          if value.count(old) != 1:
+              raise SystemExit(f"expected one CIDR template, found {value.count(old)}")
+          path.write_text(value.replace(old, new))
+          PY
+          node --check scripts/apply-cloudssh-69.mjs
+
       - name: Apply CloudSSH 69 patch
         run: node scripts/apply-cloudssh-69.mjs
 
