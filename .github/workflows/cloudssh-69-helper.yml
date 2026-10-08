@@ -34,6 +34,9 @@ jobs:
           output = []
           in_outer_template = False
 
+          def unescaped_backticks(value: str) -> int:
+              return len(re.findall(r"(?<!\\)`", value))
+
           def literal_template_body(value: str) -> str:
               marker = "__CLOUDSSH_ESCAPED_BACKTICK__"
               value = value.replace(r"\`", marker)
@@ -44,8 +47,10 @@ jobs:
           for line in lines:
               stripped = line.lstrip()
               if not in_outer_template:
-                  if stripped.startswith("`") and not re.match(
-                      r"^`[;,]?\s*$", stripped
+                  if (
+                      stripped.startswith("`")
+                      and unescaped_backticks(stripped) == 1
+                      and not re.match(r"^`[;,]?\s*$", stripped)
                   ):
                       index = line.index("`")
                       output.append(
