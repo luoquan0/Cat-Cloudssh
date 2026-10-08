@@ -1,0 +1,109 @@
+name: CloudSSH 69 helper
+
+on:
+  push:
+    branches:
+      - format-helper-64
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cloudssh-69-helper
+  cancel-in-progress: true
+
+jobs:
+  apply-test-commit:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout helper branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply CloudSSH 69 patch
+        run: node scripts/apply-cloudssh-69.mjs
+
+      - name: Format changed files
+        run: |
+          npx prettier --write \
+            src/backend/agent/transport-settings.ts \
+            src/backend/agent/transport-settings.test.ts \
+            src/backend/agent/routes.ts \
+            src/backend/agent/device-admin.ts \
+            src/backend/utils/trust-loopback-proxy.ts \
+            src/backend/tests/utils/trust-loopback-proxy.test.ts \
+            src/backend/panel-runtime/jobs.ts \
+            src/backend/panel-runtime/jobs.test.ts \
+            src/ui/api/agent-admin-api.ts \
+            src/ui/sidebar/AgentIntegrationPanel.tsx \
+            src/ui/sidebar/PanelAgentPanel.tsx \
+            src/ui/features/terminal/Terminal.tsx \
+            src/ui/features/terminal/agent-trace.ts \
+            src/ui/tests/features/terminal/agent-trace.test.ts \
+            src/ui/tests/sidebar/AgentIntegrationPanel.test.tsx \
+            src/ui/locales/en.json \
+            src/ui/locales/translated/zh_CN.json \
+            skills/cloudssh-agent/SKILL.md \
+            docs/CLOUDSSH.md \
+            docs/CLOUDSSH-UPDATES.md \
+            docs/PANEL-AGENT-RUNTIME.md \
+            RELEASE_NOTES.md \
+            package.json \
+            package-lock.json \
+            docker/docker-compose.cloudssh.yml \
+            scripts/cloudssh-verify-restore.sh
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Targeted regression tests
+        run: |
+          npx vitest run \
+            src/backend/panel-runtime/jobs.test.ts \
+            src/backend/agent/transport-settings.test.ts \
+            src/backend/tests/utils/trust-loopback-proxy.test.ts \
+            src/ui/tests/features/terminal/agent-trace.test.ts \
+            src/ui/tests/sidebar/AgentIntegrationPanel.test.tsx \
+            src/ui/tests/sidebar/PanelAgentPanel.test.tsx
+
+      - name: Full tests
+        run: npm test
+
+      - name: Skill tests
+        run: npm run test:skill
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit validated patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git reset -- .github/workflows/cloudssh-69-helper.yml scripts/apply-cloudssh-69.mjs
+          if git diff --cached --quiet; then
+            echo "No patch changes to commit."
+            exit 1
+          fi
+          git commit -m "feat: stabilize Agent SSH sharing and HTTP policy (.69)"
+          git push origin HEAD:format-helper-64
