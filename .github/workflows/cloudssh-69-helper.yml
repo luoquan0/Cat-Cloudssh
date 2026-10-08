@@ -82,6 +82,9 @@ jobs:
           PY
           node --check scripts/apply-cloudssh-69.mjs
 
+      - name: Apply CloudSSH 69 patch
+        run: node scripts/apply-cloudssh-69.mjs
+
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -90,9 +93,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Apply CloudSSH 69 patch
-        run: node scripts/apply-cloudssh-69.mjs
 
       - name: Format changed files
         run: |
