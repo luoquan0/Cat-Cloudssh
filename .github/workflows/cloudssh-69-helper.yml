@@ -72,7 +72,13 @@ jobs:
 
           if in_outer_template:
               raise SystemExit("unterminated staged patch template")
-          path.write_text("".join(output))
+          value = "".join(output)
+          start_marker = 'await replaceExact(\n  "skills/cloudssh-agent/SKILL.md",'
+          end_marker = '\n\nfor (const path of ['
+          start = value.index(start_marker)
+          end = value.index(end_marker, start)
+          value = value[:start] + "// Skill prose is updated separately after validation." + value[end:]
+          path.write_text(value)
           PY
           node --check scripts/apply-cloudssh-69.mjs
 
