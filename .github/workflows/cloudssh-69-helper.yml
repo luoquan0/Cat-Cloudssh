@@ -45,7 +45,7 @@ jobs:
               stripped = line.lstrip()
               if not in_outer_template:
                   if stripped.startswith("`") and not re.match(
-                      r"^`,?\s*$", stripped
+                      r"^`[;,]?\s*$", stripped
                   ):
                       index = line.index("`")
                       output.append(
