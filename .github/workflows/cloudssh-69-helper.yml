@@ -112,6 +112,7 @@ jobs:
       - name: Format changed files
         run: |
           npx prettier --write \
+            scripts/apply-cloudssh-69.mjs \
             src/backend/agent/transport-settings.ts \
             src/backend/agent/transport-settings.test.ts \
             src/backend/agent/routes.ts \
