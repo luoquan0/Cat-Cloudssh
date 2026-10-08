@@ -36,13 +36,47 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
+
           path = Path("scripts/apply-cloudssh-69.mjs")
-          value = path.read_text()
-          old = '    const cidr = `${address}/${prefix}`;'
-          new = '    const cidr = address + "/" + prefix;'
-          if value.count(old) != 1:
-              raise SystemExit(f"expected one CIDR template, found {value.count(old)}")
-          path.write_text(value.replace(old, new))
+          lines = path.read_text().splitlines(keepends=True)
+          output = []
+          in_outer_template = False
+
+          def literal_template_body(value: str) -> str:
+              marker = "__CLOUDSSH_ESCAPED_BACKTICK__"
+              value = value.replace(r"\`", marker)
+              value = value.replace("`", r"\`")
+              value = value.replace(marker, r"\`")
+              return re.sub(r"(?<!\\)\$\{", r"\${", value)
+
+          for line in lines:
+              stripped = line.lstrip()
+              if not in_outer_template:
+                  if stripped.startswith("`") and not re.match(
+                      r"^`,?\s*$", stripped
+                  ):
+                      index = line.index("`")
+                      output.append(
+                          line[: index + 1]
+                          + literal_template_body(line[index + 1 :])
+                      )
+                      in_outer_template = True
+                  else:
+                      output.append(line)
+                  continue
+
+              if re.match(r"^\s*`,\s*$", line) or re.match(
+                  r"^\s*`;\s*$", line
+              ):
+                  output.append(line)
+                  in_outer_template = False
+              else:
+                  output.append(literal_template_body(line))
+
+          if in_outer_template:
+              raise SystemExit("unterminated staged patch template")
+          path.write_text("".join(output))
           PY
           node --check scripts/apply-cloudssh-69.mjs
 
