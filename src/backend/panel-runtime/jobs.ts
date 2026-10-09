@@ -514,6 +514,7 @@ export class RuntimeJobs {
     let pendingBytes = 0;
     let outputFailed = false;
     let timedOut = false;
+    let commandDispatched = false;
     const timer = setTimeout(() => {
       timedOut = true;
       controller.abort(new Error("Command deadline exceeded"));
@@ -521,6 +522,7 @@ export class RuntimeJobs {
 
     try {
       await this.authorize(owner, target);
+      signal.throwIfAborted();
       const session = sessionManager.acquireAgentRuntimeLease(
         sessionId,
         owner,
@@ -546,6 +548,21 @@ export class RuntimeJobs {
         const finish = (error?: unknown) => {
           if (settled) return;
           settled = true;
+          if (state === "capturing") {
+            let tail = carry + decoder.end();
+            carry = "";
+            for (
+              let size = Math.min(tail.length, endPrefix.length);
+              size > 0;
+              size -= 1
+            ) {
+              if (endPrefix.startsWith(tail.slice(-size))) {
+                tail = tail.slice(0, -size);
+                break;
+              }
+            }
+            append(tail);
+          }
           if (abortTimer) clearTimeout(abortTimer);
           signal.removeEventListener("abort", abort);
           stream.removeListener("data", onData);
@@ -628,6 +645,10 @@ export class RuntimeJobs {
         };
         const abort = () => {
           if (settled || abortTimer) return;
+          if (!commandDispatched) {
+            finish(signal.reason);
+            return;
+          }
           try {
             stream.write("\u0003");
           } catch {
@@ -643,6 +664,8 @@ export class RuntimeJobs {
 
         const wrapper = buildSharedTerminalCommand(job.command, job.cwd, token);
         try {
+          signal.throwIfAborted();
+          commandDispatched = true;
           stream.write(wrapper);
         } catch (error) {
           finish(error);
@@ -678,7 +701,7 @@ export class RuntimeJobs {
       ).slice(0, 800);
     } finally {
       clearTimeout(timer);
-      if (job.exitCode === null) {
+      if (commandDispatched && job.exitCode === null) {
         const session = sessionManager.getSession(sessionId);
         if (session?.isConnected && session.sshStream) {
           this.sharedRecoveryRequired.add(sessionId);
