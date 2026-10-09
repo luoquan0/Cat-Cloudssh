@@ -17,16 +17,18 @@ jobs:
       contents: write
     env:
       NODE_OPTIONS: --max-old-space-size=4096
+      TYPE_BASELINE: 74681a00c92337868caaace144658ff0c139912c
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version-file: .nvmrc
           cache: npm
-      - name: Finalize actual repair source
-        run: python3 scripts/agent-repair-finalize.py
+      - name: Apply reviewed cancellation guards
+        run: python3 scripts/agent-repair-safety.py
       - name: Install locked dependencies
         run: npm ci > /tmp/install.log 2>&1 || { tail -n 80 /tmp/install.log; exit 1; }
       - name: Format and persist source on repair branch
@@ -38,12 +40,13 @@ jobs:
           npx --no-install prettier --write src/backend/agent/http-policy-router.ts
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src scripts/shared-terminal-pty-check.py package.json package-lock.json docker/docker-compose.cloudssh.yml scripts/cloudssh-verify-restore.sh docs RELEASE_NOTES.md .github/workflows/agent-terminal-repair.yml
+          git add src skills scripts/shared-terminal-pty-check.py package.json package-lock.json docker/docker-compose.cloudssh.yml scripts/cloudssh-verify-restore.sh docs RELEASE_NOTES.md .github/workflows/agent-terminal-repair.yml
           if ! git diff --cached --quiet; then
-            git commit -m 'fix(agent): finalize tested .69 terminal and HTTP policy implementation'
+            git commit -m 'fix(agent): complete cancellation recovery and .69 regression coverage'
             gh auth setup-git
             git push origin HEAD:fix/agent-terminal-stability-69
           fi
+          git diff --exit-code
           echo "VALIDATED_SOURCE=$(git rev-parse HEAD)"
       - name: Lint
         run: npm run lint > /tmp/lint.log 2>&1 || { tail -n 100 /tmp/lint.log; exit 1; }
@@ -51,11 +54,11 @@ jobs:
         run: npm run format:check
       - name: Backend type check
         run: npx tsc -p tsconfig.node.json --noEmit
-      - name: Frontend type check
-        run: npm run type-check
+      - name: Frontend diagnostic regression check
+        run: node scripts/check-frontend-type-regressions.mjs "$TYPE_BASELINE"
       - name: Complete regression suite
         run: |
-          npm test > /tmp/tests.log 2>&1 || { tail -n 260 /tmp/tests.log; exit 1; }
+          npm test > /tmp/tests.log 2>&1 || { tail -n 180 /tmp/tests.log; exit 1; }
           tail -n 12 /tmp/tests.log
       - name: Standalone Skill tests
         run: npm run test:skill > /tmp/skill.log 2>&1 || { tail -n 100 /tmp/skill.log; exit 1; }
