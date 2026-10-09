@@ -915,6 +915,18 @@ class TerminalSessionManager {
   releaseAgentRuntimeLease(sessionId: string, leaseId: string): boolean {
     const session = this.sessions.get(sessionId);
     if (!session || session.agentRuntimeLeaseId !== leaseId) return false;
+    if (
+      session.agentRuntimeOutputState === "capturing" &&
+      session.agentRuntimeOutputCarry
+    ) {
+      const carry = session.agentRuntimeOutputCarry;
+      const marker = carry.indexOf("\u001b]777;cloudssh-agent-");
+      const tail = marker >= 0 ? carry.slice(0, marker) : carry;
+      if (tail) {
+        this.bufferOutput(sessionId, tail);
+        this.broadcast(sessionId, { type: "data", data: tail });
+      }
+    }
     session.agentRuntimeLeaseId = null;
     session.agentRuntimeOutputToken = null;
     session.agentRuntimeOutputState = "waiting";

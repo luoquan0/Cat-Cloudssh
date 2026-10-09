@@ -329,7 +329,8 @@ describe("shared terminal execution", () => {
     );
 
     expect(connect).not.toHaveBeenCalled();
-    expect(channel.writes.join("")).toContain("eval 'pwd'");
+    expect(channel.writes.join("")).toContain("command sh -c");
+    expect(channel.writes.join("")).not.toContain("eval 'pwd'");
 
     const output = await jobs.read(
       "alice",

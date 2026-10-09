@@ -187,3 +187,34 @@ export function trustLoopbackProxy(
   if (hop !== 0) return false;
   return isTrustedProxyPeer(address, variables);
 }
+
+type AgentHttpPolicyValue = { allowHttp: boolean; allowedCidrs: string[] };
+let agentHttpPolicyProvider: (() => AgentHttpPolicyValue) | undefined;
+export function setAgentHttpPolicyProvider(
+  provider?: () => AgentHttpPolicyValue,
+): void {
+  agentHttpPolicyProvider = provider;
+}
+export function isAgentTransportAllowed(
+  request: TransportRequest,
+  environment = process.env.NODE_ENV,
+  variables: NodeJS.ProcessEnv = process.env,
+): boolean {
+  let policy: AgentHttpPolicyValue | undefined;
+  try {
+    policy = agentHttpPolicyProvider?.();
+  } catch {
+    policy = { allowHttp: false, allowedCidrs: [] };
+  }
+  return isAdministrativeTransportAllowed(
+    request,
+    environment,
+    policy
+      ? {
+          ...variables,
+          CLOUDSSH_AGENT_ALLOW_HTTP: policy.allowHttp ? "true" : "false",
+          CLOUDSSH_AGENT_HTTP_ALLOWED_CIDRS: policy.allowedCidrs.join(","),
+        }
+      : variables,
+  );
+}

@@ -1,3 +1,4 @@
+import { AdminAgentHttpSettings } from "./AdminAgentHttpSettings";
 import { useEffect, useState } from "react";
 import { Bot, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -133,6 +134,7 @@ export function AdminPanelAgentSection({
       scrollIntoViewOnOpen
     >
       <div className="space-y-3 pt-3">
+        <AdminAgentHttpSettings active={open} />
         {loading && (
           <div className="text-xs text-muted-foreground">
             {t("common.loading")}
