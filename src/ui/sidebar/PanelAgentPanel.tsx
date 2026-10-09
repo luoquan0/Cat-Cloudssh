@@ -1757,7 +1757,7 @@ export function PanelAgentPanel({
                 {
                   mode: "shared-terminal",
                   label: "共享所选终端 SSH",
-                  hint: "与一个已连接终端共享同一 shell、cwd 和环境变量。",
+                  hint: "共享终端显示，继承当前目录与已导出环境；命令在子 Shell 执行，不改变或退出你的主 Shell。",
                 },
                 {
                   mode: "isolated",

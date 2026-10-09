@@ -883,7 +883,7 @@ async function deviceManagerContext(
   return { auth, projects, isInstanceAdmin };
 }
 
-function requireRecentMfa(
+export function requireRecentMfa(
   dependencies: AgentDeviceAdminDependencies,
   req: express.Request,
   res: express.Response,

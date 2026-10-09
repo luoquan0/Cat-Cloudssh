@@ -1,3 +1,6 @@
+import { AgentHttpPolicyStore } from "./http-policy.js";
+import { createAgentHttpPolicyRouter } from "./http-policy-router.js";
+import { setAgentHttpPolicyProvider } from "../utils/trust-loopback-proxy.js";
 import http from "http";
 import path from "path";
 import { AgentSessionBroker } from "./broker.js";
@@ -139,6 +142,18 @@ const app = createAgentApp({
   audit,
 });
 app.use(cookieParser());
+const httpPolicyStore = new AgentHttpPolicyStore(
+  sqlite,
+  forceDeviceSecuritySave,
+);
+setAgentHttpPolicyProvider(() => httpPolicyStore.snapshot());
+app.use(
+  "/agent/admin/v1/transport-policy",
+  createAgentHttpPolicyRouter(
+    defaultAgentDeviceAdminDependencies(sqlite, forceDeviceSecuritySave),
+    httpPolicyStore,
+  ),
+);
 app.use(
   "/agent/admin/v1",
   createAgentSessionAdminRouter(defaultAgentSessionAdminDependencies(sqlite)),

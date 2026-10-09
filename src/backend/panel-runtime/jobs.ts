@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import { StringDecoder } from "node:string_decoder";
+import { buildSharedTerminalCommand } from "./shared-terminal-command.js";
 import path from "node:path";
 import { promises as fs, constants } from "node:fs";
 import { Client, type ClientChannel } from "ssh2";
@@ -286,6 +288,7 @@ type LiveJob = {
 };
 export class RuntimeJobs {
   private live = new Map<string, LiveJob>();
+  private sharedRecoveryRequired = new Set<string>();
   private failures = new Map<string, RuntimeError>();
   checkHealthy(runId: string) {
     const error = this.failures.get(runId);
@@ -497,6 +500,12 @@ export class RuntimeJobs {
       "SHARED_TERMINAL_REQUIRED",
       "共享当前 SSH 需要一个已连接终端",
     );
+    requireValue(
+      !this.sharedRecoveryRequired.has(sessionId),
+      409,
+      "SHARED_TERMINAL_RECOVERY_REQUIRED",
+      "上次共享命令中断后未收到 Shell 结束标记。请人工核对，关闭该终端并建立新 SSH，或改用独立执行；不会自动重放命令。",
+    );
     const leaseId = `panel-agent-${job.id}`;
     const token = crypto.randomBytes(16).toString("hex");
     const beginMarker = `\u001b]777;cloudssh-agent-begin=${token}\u0007`;
@@ -505,6 +514,7 @@ export class RuntimeJobs {
     let pendingBytes = 0;
     let outputFailed = false;
     let timedOut = false;
+    let commandDispatched = false;
     const timer = setTimeout(() => {
       timedOut = true;
       controller.abort(new Error("Command deadline exceeded"));
@@ -512,6 +522,7 @@ export class RuntimeJobs {
 
     try {
       await this.authorize(owner, target);
+      signal.throwIfAborted();
       const session = sessionManager.acquireAgentRuntimeLease(
         sessionId,
         owner,
@@ -523,6 +534,7 @@ export class RuntimeJobs {
       job.status = "running";
       this.terminalTrace(owner, target, {
         phase: "start",
+        jobId: job.id,
         command: job.command,
         shared: true,
       });
@@ -530,11 +542,27 @@ export class RuntimeJobs {
         let settled = false;
         let state: "waiting" | "capturing" | "status" = "waiting";
         let carry = "";
+        const decoder = new StringDecoder("utf8");
         let abortTimer: ReturnType<typeof setTimeout> | undefined;
 
         const finish = (error?: unknown) => {
           if (settled) return;
           settled = true;
+          if (state === "capturing") {
+            let tail = carry + decoder.end();
+            carry = "";
+            for (
+              let size = Math.min(tail.length, endPrefix.length);
+              size > 0;
+              size -= 1
+            ) {
+              if (endPrefix.startsWith(tail.slice(-size))) {
+                tail = tail.slice(0, -size);
+                break;
+              }
+            }
+            append(tail);
+          }
           if (abortTimer) clearTimeout(abortTimer);
           signal.removeEventListener("abort", abort);
           stream.removeListener("data", onData);
@@ -597,7 +625,7 @@ export class RuntimeJobs {
         };
         const onData = (chunk: Buffer | string) => {
           let value =
-            carry + (Buffer.isBuffer(chunk) ? chunk.toString("utf8") : chunk);
+            carry + (Buffer.isBuffer(chunk) ? decoder.write(chunk) : chunk);
           carry = "";
           if (state === "waiting") {
             const begin = value.indexOf(beginMarker);
@@ -616,6 +644,11 @@ export class RuntimeJobs {
           else if (state === "status") consumeStatus(value);
         };
         const abort = () => {
+          if (settled || abortTimer) return;
+          if (!commandDispatched) {
+            finish(signal.reason);
+            return;
+          }
           try {
             stream.write("\u0003");
           } catch {
@@ -629,17 +662,10 @@ export class RuntimeJobs {
         stream.once("close", closed);
         signal.addEventListener("abort", abort, { once: true });
 
-        const command = job.cwd
-          ? `cd -- ${shellQuote(job.cwd)} && eval ${shellQuote(job.command)}`
-          : `eval ${shellQuote(job.command)}`;
-        const wrapper =
-          `printf '\\033]777;cloudssh-agent-begin=${token}\\007'; ` +
-          "__cloudssh_had_e=0; case $- in *e*) __cloudssh_had_e=1; set +e;; esac; " +
-          command +
-          "; __cloudssh_status=$?; " +
-          'if [ "$__cloudssh_had_e" = 1 ]; then set -e; fi; ' +
-          `printf '\\033]777;cloudssh-agent-end=${token};status=%s\\007' "$__cloudssh_status"\r`;
+        const wrapper = buildSharedTerminalCommand(job.command, job.cwd, token);
         try {
+          signal.throwIfAborted();
+          commandDispatched = true;
           stream.write(wrapper);
         } catch (error) {
           finish(error);
@@ -675,9 +701,19 @@ export class RuntimeJobs {
       ).slice(0, 800);
     } finally {
       clearTimeout(timer);
+      if (commandDispatched && job.exitCode === null) {
+        const session = sessionManager.getSession(sessionId);
+        if (session?.isConnected && session.sshStream) {
+          this.sharedRecoveryRequired.add(sessionId);
+          session.sshStream.once("close", () =>
+            this.sharedRecoveryRequired.delete(sessionId),
+          );
+        }
+      }
       sessionManager.releaseAgentRuntimeLease(sessionId, leaseId);
       this.terminalTrace(owner, target, {
         phase: "end",
+        jobId: job.id,
         status: job.status,
         exitCode: job.exitCode,
         shared: true,
@@ -694,6 +730,10 @@ export class RuntimeJobs {
     mirror = false,
   ) {
     const signal = controller.signal;
+    const traceDecoders = {
+      stdout: new StringDecoder("utf8"),
+      stderr: new StringDecoder("utf8"),
+    };
     let client: Client | undefined;
     let stream: ClientChannel | undefined;
     let timedOut = false;
@@ -706,6 +746,7 @@ export class RuntimeJobs {
     if (mirror) {
       this.terminalTrace(owner, target, {
         phase: "start",
+        jobId: job.id,
         command: job.command,
         shared: false,
       });
@@ -769,7 +810,8 @@ export class RuntimeJobs {
             if (mirror) {
               this.terminalTrace(owner, target, {
                 phase: kind,
-                data: data.toString("utf8"),
+                data: traceDecoders[kind].write(data),
+                jobId: job.id,
                 shared: false,
               });
             }
@@ -849,8 +891,19 @@ export class RuntimeJobs {
         /* Only the dedicated channel is closed. */
       }
       if (mirror) {
+        for (const kind of ["stdout", "stderr"] as const) {
+          const tail = traceDecoders[kind].end();
+          if (tail)
+            this.terminalTrace(owner, target, {
+              phase: kind,
+              data: tail,
+              jobId: job.id,
+              shared: false,
+            });
+        }
         this.terminalTrace(owner, target, {
           phase: "end",
+          jobId: job.id,
           status: job.status,
           exitCode: job.exitCode,
           shared: false,

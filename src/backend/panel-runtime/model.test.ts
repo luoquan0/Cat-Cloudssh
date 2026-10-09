@@ -267,6 +267,9 @@ it("describes shared-terminal shell semantics to the model", () => {
     [],
   );
   const prompt = JSON.stringify(messages);
-  expect(prompt).toContain("same PTY");
-  expect(prompt).toContain("cwd and environment are inherited");
+  expect(prompt).toContain("selected live SSH PTY");
+  expect(prompt).toContain("protected non-interactive child sh");
+  expect(prompt).toContain("directory and exported environment are inherited");
+  expect(prompt).toContain("NOT the human login shell or the next command");
+  expect(prompt).toContain("Standard input is closed");
 });

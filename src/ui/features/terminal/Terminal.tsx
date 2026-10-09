@@ -1,3 +1,4 @@
+import { AgentTraceFormatter } from "./agent-trace-formatter";
 /* eslint-disable react-hooks/exhaustive-deps */
 import {
   useEffect,
@@ -361,6 +362,7 @@ const TerminalInner = forwardRef<TerminalHandle, SSHTerminalProps>(
     const [isManagedTmux, setIsManagedTmux] = useState(sessionManagedTmux);
     const inputBlockedRef = useRef(false);
     const agentInputBlockedRef = useRef(Boolean(hostConfig.agentSessionId));
+    const panelAgentTraceRef = useRef(new AgentTraceFormatter());
     const panelAgentInputBlockedRef = useRef(false);
     const [agentAccessMode, setAgentAccessMode] =
       useState<AgentSessionAccessMode | null>(
@@ -1833,28 +1835,8 @@ const TerminalInner = forwardRef<TerminalHandle, SSHTerminalProps>(
               );
             }
           } else if (msg.type === "agentTrace") {
-            const phase = String(msg.phase || "");
-            if (phase === "conceal") {
-              terminal.write("\u001b[8m");
-            } else if (phase === "reveal") {
-              terminal.write("\u001b[28m");
-            } else if (phase === "start") {
-              const command = cleanTerminalContext(String(msg.command || ""))
-                .replace(/\r?\n/g, " ")
-                .trim();
-              terminal.write(`\r\n\u001b[35m[Agent]\u001b[0m $ ${command}\r\n`);
-            } else if (phase === "stdout" || phase === "stderr") {
-              terminal.write(String(msg.data || ""));
-            } else if (phase === "end") {
-              const status = cleanTerminalContext(String(msg.status || "done"));
-              const exitCode =
-                typeof msg.exitCode === "number"
-                  ? ` · exit ${msg.exitCode}`
-                  : "";
-              terminal.write(
-                `\r\n\u001b[35m[Agent]\u001b[0m ${status}${exitCode}\r\n`,
-              );
-            }
+            const display = panelAgentTraceRef.current.format(msg);
+            if (display) terminal.write(display);
           } else if (msg.type === "agentControlState") {
             panelAgentInputBlockedRef.current = msg.active === true;
             syncTerminalInputState();

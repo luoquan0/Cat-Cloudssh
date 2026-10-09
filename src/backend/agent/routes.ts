@@ -37,7 +37,7 @@ import type { AgentSessionRuntimeMode } from "./types.js";
 import { rawBodySaver } from "./device-registration.js";
 import { setAgentStreamedBodyHash } from "./device-auth.js";
 import {
-  isAdministrativeTransportAllowed,
+  isAgentTransportAllowed,
   trustLoopbackProxy,
 } from "../utils/trust-loopback-proxy.js";
 import { createCorsMiddleware } from "../utils/cors-config.js";
@@ -1018,13 +1018,13 @@ export function createAgentApp(dependencies: AgentRouterDependencies) {
   let activeFileUploads = 0;
   app.disable("x-powered-by");
   // Agent API 只信任回环或 CLOUDSSH_TRUSTED_PROXY_CIDR 明确声明的第一跳代理。
-  // HTTP 准入仍由 isAdministrativeTransportAllowed 独立校验来源 CIDR。
+  // HTTP 准入仍由 isAgentTransportAllowed 独立校验来源 CIDR。
   app.set("trust proxy", trustLoopbackProxy);
   app.use(createCorsMiddleware());
   // 传输安全校验必须早于设备预认证和任何正文解析，避免在不安全连接上
   // 消费 nonce 或缓冲请求数据。
   app.use("/agent/v1", (req, res, next) => {
-    if (req.path === "/health" || isAdministrativeTransportAllowed(req)) {
+    if (req.path === "/health" || isAgentTransportAllowed(req)) {
       next();
       return;
     }

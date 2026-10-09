@@ -12,6 +12,9 @@ https://youtu.be/g0QjNdV3YYY
 
 <!-- UPDATE_LOG -->
 
+- Added administrator-only persistent Agent LAN HTTP controls with source CIDR validation, same-origin checks, recent MFA and durable audit. The setting applies immediately to Agent API requests without weakening unrelated administrative transport rules.
+- Protected shared-PTY Agent commands from exiting the human login shell: a non-interactive child inherits cwd and exported environment while keeping exit, exec and shell options local. Long scripts and terminal control bytes are encoded; ambiguous cancellation prevents further automatic writes to that terminal.
+- Fixed mirrored terminal output with streaming UTF-8 decoding, consistent CRLF line endings, preserved multiline commands, job labels and filtered cursor/clipboard control sequences.
 - Added automatic formal releases after a successful CloudSSH fast-image build: the exact successful main commit is checked out, fully tested and rebuilt, release assets and SHA-256 manifests are generated, and a latest GitHub Release is published so the in-app updater can install it directly.
 - Improved long Agent chats with bounded independent scrolling, manual scroll position preservation, and a "回到最新消息" control instead of forcing every new message to the bottom.
 - Added deletion and one-click clearing for legacy browser-only Agent conversation caches stored in localStorage.

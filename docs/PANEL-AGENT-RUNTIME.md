@@ -1,4 +1,30 @@
-# Panel Agent runtime - 2.6.0-cloudssh.67
+# Panel Agent runtime - 2.6.0-cloudssh.69
+
+## .69 protected shared terminal and readable mirrors
+
+Shared-terminal tasks continue to use the selected SSH PTY, but run in a protected
+non-interactive child `sh`, not `eval` in the human login shell. The child inherits
+the human shell's cwd and exported environment. Its `cd`, `export`, shell options,
+`exit` and `exec` do not alter the parent or persist to subsequent tasks. Use the
+`cwd` tool argument for later commands. This intentionally replaces the unsafe
+`.61` same-shell state behavior. The parent must be an idle POSIX shell, not an
+editor, pager or interactive application. Standard input is closed for Agent tasks.
+
+Long scripts are encoded into bounded ASCII terminal input lines, preserving
+heredocs, quoting and Unicode without sending command-embedded control characters
+to the terminal driver. Terminal settings are restored after a completed task.
+Stopping/timing out never destroys the user's SSH transport. If no completion
+marker arrives after cancellation, further Agent writes to that terminal are
+blocked: inspect manually and create a new SSH terminal, or use isolated execution.
+Commands are never automatically replayed. This is not a shell security sandbox:
+rebooting, stopping SSH/networking, or intentionally killing the parent can still
+disconnect a terminal.
+
+Mirroring remains display-only. It uses streaming UTF-8, CRLF-normalized text,
+multiline command formatting and job labels, and removes cursor/clipboard control
+sequences that could corrupt the human terminal display. stdout/stderr follow their
+observed arrival order; separate SSH streams cannot reconstruct an ordering that
+the remote process did not preserve.
 
 ## .66 stable manual-scroll behavior
 
