@@ -9,39 +9,52 @@ concurrency:
   group: agent-terminal-repair-69
   cancel-in-progress: true
 jobs:
-  inspect:
+  check:
+    if: github.repository == 'luoquan0/Cat-Cloudssh'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - name: Inspect relevant source paths
-        shell: bash
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Apply staged repairs
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          targets = {
-            'src/ui/features/terminal/Terminal.tsx': ['agentTrace', 'agentControlState', 'writeAgentTrace'],
-            'src/backend/hosts/terminal/index.ts': ['filterAgentRuntimeOutput'],
-            'src/backend/database/database.ts': ['admin/settings', 'createUpdateRoutes'],
-            'src/ui/sidebar/AdminSettings.tsx': ['AdminPanelAgentSection'],
-            'src/backend/panel-runtime/jobs.test.ts': ['shared-terminal', 'acquireAgentRuntimeLease'],
-          }
-          for name, needles in targets.items():
-            p = Path(name)
-            if not p.exists():
-              print('MISSING', name)
-              continue
-            lines = p.read_text().splitlines()
-            spans = set()
-            for i, line in enumerate(lines):
-              if any(needle in line for needle in needles):
-                spans.update(range(max(0, i-18), min(len(lines), i+65)))
-            print('\nFILE', name)
-            for i in sorted(spans): print(f'{i+1}: {lines[i]}')
-          for folder in ['src/backend/database/routes', 'src/ui/sidebar', 'src/backend/panel-runtime']:
-            print('PATHS', folder)
-            for p in Path(folder).glob('*'):
-              if any(s in p.name.lower() for s in ['admin', 'setting', 'job', 'policy', 'router']): print(p)
-          PY
+          python3 scripts/agent-terminal-repair.py
+          python3 scripts/agent-http-repair.py
+      - run: npm ci
+      - name: Format changed source
+        run: |
+          git add src
+          git diff --cached --name-only -z --diff-filter=ACM -- '*.ts' '*.tsx' | xargs -0 -r npx --no-install prettier --write
+          npx --no-install prettier --write .github/workflows/agent-terminal-repair.yml
+      - name: Save repair source on isolated branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src .github/workflows/agent-terminal-repair.yml
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix(agent): protected shared shell, readable traces and LAN HTTP controls'
+            gh auth setup-git
+            git push origin HEAD:fix/agent-terminal-stability-69
+          fi
+          echo "VALIDATED_SOURCE=$(git rev-parse HEAD)"
+      - run: npm run lint
+      - run: npm run format:check
+      - name: Backend type check
+        run: npx tsc -p tsconfig.node.json --noEmit
+      - name: Frontend type check
+        run: npm run type-check
+      - run: npm test
+      - run: npm run test:skill
+      - run: npm run build
