@@ -1,3 +1,4 @@
+import { StringDecoder } from "node:string_decoder";
 import { WebSocketServer, WebSocket, type RawData } from "ws";
 import crypto from "crypto";
 import ssh2Pkg, {
@@ -4892,10 +4893,11 @@ wss.on("connection", async (ws: WebSocket, req) => {
               }
 
               const boundSessionId = currentSessionId;
+              const terminalUtf8Decoder = new StringDecoder("utf8");
 
               stream.on("data", (data: Buffer) => {
                 try {
-                  const utf8String = data.toString("utf-8");
+                  const utf8String = terminalUtf8Decoder.write(data);
 
                   if (!utf8String) return;
 

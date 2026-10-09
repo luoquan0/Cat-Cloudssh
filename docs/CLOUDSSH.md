@@ -49,6 +49,23 @@ WebAuthn 后，不带 `ALLOW_REGISTRATION=true` 重新创建容器；编排默�
 64 个。启动脚本会逐项校验并去重，非可信来源伪造的 `X-Forwarded-Proto`、
 `X-Forwarded-Host` 和 `X-Forwarded-Port` 不会生效。
 
+### 管理界面配置 Agent 内网 HTTP（.69 起）
+
+实例管理员可以在“管理 → Agent 设置 → Agent 内网 HTTP”中开启开关并填写
+客户端的来源 CIDR。优先使用单个地址 `/32` 或最小可信网段；界面显示的是
+服务端实际识别的来源，不是 SSH 目标地址。仅允许受控内网/VPN 网段，不允许
+公网地址、`0.0.0.0/0` 或格式不完整的 CIDR。保存需要同源网页操作、近期 MFA
+及成功落盘的审计；可从真实内网 HTTP 地址显式完成首次开启。
+
+设置写入现有持久化 settings 数据库，保存成功后立即生效，不用重建容器。
+尚未通过界面保存时仍使用原有环境变量；已保存的界面配置优先。部署者可设置
+`CLOUDSSH_AGENT_HTTP_POLICY_LOCKED=true` 强制锁定环境变量，禁止界面覆盖。
+该开关只改变独立 Agent API 传输准入，不取消设备审批、签名、防重放或项目权限，
+也不放宽凭据导出等其他管理员接口的 HTTPS 策略。HTTP 仍不提供链路加密。
+
+Skill 客户端仍需显式 `--allow-http`。HTTP 策略和 SSH 命令自动执行开关是
+不同功能；升级本身不会自动批准设备，也不会替你启用 HTTP。
+
 ### Agent 传输模式
 
 CloudSSH 正式支持三种 Agent 部署方式：

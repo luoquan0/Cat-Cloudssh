@@ -45,7 +45,7 @@ export const RUNTIME_TOOLS: ChatCompletionTool[] = [
     function: {
       name: "run_command",
       description:
-        "Execute a command over an independent non-interactive SSH exec channel, NOT the user's terminal. Returns jobId and real status; running does not mean success. Poll read_job_output until finished. cwd and environment are NOT inherited from previous commands or the user's terminal. Mutating/unknown commands require user approval.",
+        "Execute one bounded non-interactive command using the execution mode described in the system context. Returns jobId and real status; running is not success. Poll read_job_output until finished. Set cwd explicitly when needed; command-side cd/export never persist to the next job. Mutating/unknown commands follow the user's approval mode.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -174,7 +174,7 @@ export function basePrompt(
     .join("\n\n");
   const executionGuidance =
     run.options.sshMode === "shared-terminal"
-      ? "Commands run in the user's selected live interactive SSH shell under an exclusive Agent write lease. The existing shell cwd and environment are inherited, and command-side cd/export may persist into later shared-shell commands. The human terminal is visibly the same PTY and manual input is temporarily locked while an Agent command is running. Do not launch interactive editors, pagers, password prompts, or full-screen programs. Use short bounded shell commands and inspect results before mutating."
+      ? "Commands use a protected non-interactive child sh on the selected live SSH PTY under an exclusive Agent write lease. The current human shell directory and exported environment are inherited. Command-side cd/export, exit, exec and shell options affect only the child, NOT the human login shell or the next command. Use cwd for subsequent jobs. The terminal must be idle at a POSIX shell prompt. Standard input is closed; never launch interactive editors, pagers, shells, password prompts or full-screen programs. Cancellation without a completion marker requires manual inspection and a new terminal before further Agent writes. Rebooting, killing the SSH server, changing networking, or terminating the parent intentionally can still disconnect the session. Use bounded commands and report uncertainty rather than replaying unknown mutations."
       : run.options.sshMode === "mirror"
         ? "Commands run in independent non-interactive SSH exec jobs, while their command/output is mirrored read-only into the selected browser terminal when it is still attached. The mirror is display-only and must never be treated as a second execution path. Each job starts in the login home unless cwd is specified; cd/export do not persist between jobs."
         : "Commands run in independent non-interactive SSH exec jobs, never in the user's browser terminal. Each job starts in the login home unless cwd is specified; cd/export do not persist between jobs.";

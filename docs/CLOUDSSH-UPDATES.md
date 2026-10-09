@@ -79,7 +79,7 @@ GitHub Release；如果仓库尚未创建任何 Release，则自动回退读取�
 {
   "schemaVersion": 3,
   "channel": "stable",
-  "version": "2.6.0-cloudssh.68",
+  "version": "2.6.0-cloudssh.69",
   "image": "ghcr.io/luoquan0/cloudssh",
   "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "revision": "0123456789abcdef0123456789abcdef01234567",
@@ -122,7 +122,7 @@ cd /opt/cloudssh
 sh scripts/cloudssh-host-image-update.sh
 
 # 固定升级到指定正式版本
-sh scripts/cloudssh-host-image-update.sh 2.6.0-cloudssh.68
+sh scripts/cloudssh-host-image-update.sh 2.6.0-cloudssh.69
 ```
 
 脚本需要 `curl`、`docker`、`gzip` 与 `sha256sum`（或 `shasum`），并且要求当前镜像仍在本机，

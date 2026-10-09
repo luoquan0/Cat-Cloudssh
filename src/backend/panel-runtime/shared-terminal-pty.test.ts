@@ -18,15 +18,27 @@ describe("real shared PTY regression", () => {
       ];
       const cases = commands.map(([command, status], index) => {
         const token = index.toString(16).padStart(32, "0");
-        return { token, status, wrapper: buildSharedTerminalCommand(command, undefined, token) };
+        return {
+          token,
+          status,
+          wrapper: buildSharedTerminalCommand(command, undefined, token),
+        };
       });
-      const result = spawnSync("python3", ["scripts/shared-terminal-pty-check.py"], {
-        input: JSON.stringify(cases), encoding: "utf8", timeout: 30000,
-      });
+      const result = spawnSync(
+        "python3",
+        ["scripts/shared-terminal-pty-check.py"],
+        {
+          input: JSON.stringify(cases),
+          encoding: "utf8",
+          timeout: 30000,
+        },
+      );
       expect(result.error).toBeUndefined();
       expect(result.stderr).toBe("");
       expect(result.status).toBe(0);
-      expect(JSON.parse(result.stdout)).toEqual(commands.map(([, status]) => ({status, parentAlive: true})));
+      expect(JSON.parse(result.stdout)).toEqual(
+        commands.map(([, status]) => ({ status, parentAlive: true })),
+      );
     },
     35000,
   );

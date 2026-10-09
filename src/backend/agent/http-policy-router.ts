@@ -107,7 +107,11 @@ export function createAgentHttpPolicyRouter(
       res: express.Response,
       _next: express.NextFunction,
     ) => {
-      const value = error as { status?: number; code?: string; message?: string };
+      const value = error as {
+        status?: number;
+        code?: string;
+        message?: string;
+      };
       res.status(value.status || 500).json({
         code: value.code || "HTTP_POLICY_SAVE_FAILED",
         error: value.status
