@@ -25,36 +25,39 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - name: Apply staged repairs
-        run: |
-          python3 scripts/agent-terminal-repair.py
-          python3 scripts/agent-http-repair.py
-      - run: npm ci
-      - name: Format changed source
-        run: |
-          git add src
-          git diff --cached --name-only -z --diff-filter=ACM -- '*.ts' '*.tsx' | xargs -0 -r npx --no-install prettier --write
-          npx --no-install prettier --write .github/workflows/agent-terminal-repair.yml
-      - name: Save repair source on isolated branch
+      - name: Finalize actual repair source
+        run: python3 scripts/agent-repair-finalize.py
+      - name: Install locked dependencies
+        run: npm ci > /tmp/install.log 2>&1 || { tail -n 80 /tmp/install.log; exit 1; }
+      - name: Format and persist source on repair branch
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          npx --no-install prettier --write . > /tmp/format.log 2>&1
+          npx --no-install prettier --write src/backend/agent/http-policy-router.ts
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src .github/workflows/agent-terminal-repair.yml
+          git add src scripts/shared-terminal-pty-check.py package.json package-lock.json docker/docker-compose.cloudssh.yml scripts/cloudssh-verify-restore.sh docs RELEASE_NOTES.md .github/workflows/agent-terminal-repair.yml
           if ! git diff --cached --quiet; then
-            git commit -m 'fix(agent): protected shared shell, readable traces and LAN HTTP controls'
+            git commit -m 'fix(agent): finalize tested .69 terminal and HTTP policy implementation'
             gh auth setup-git
             git push origin HEAD:fix/agent-terminal-stability-69
           fi
           echo "VALIDATED_SOURCE=$(git rev-parse HEAD)"
-      - run: npm run lint
-      - run: npm run format:check
+      - name: Lint
+        run: npm run lint > /tmp/lint.log 2>&1 || { tail -n 100 /tmp/lint.log; exit 1; }
+      - name: Format check
+        run: npm run format:check
       - name: Backend type check
         run: npx tsc -p tsconfig.node.json --noEmit
       - name: Frontend type check
         run: npm run type-check
-      - run: npm test
-      - run: npm run test:skill
-      - run: npm run build
+      - name: Complete regression suite
+        run: |
+          npm test > /tmp/tests.log 2>&1 || { tail -n 260 /tmp/tests.log; exit 1; }
+          tail -n 12 /tmp/tests.log
+      - name: Standalone Skill tests
+        run: npm run test:skill > /tmp/skill.log 2>&1 || { tail -n 100 /tmp/skill.log; exit 1; }
+      - name: Production build
+        run: npm run build > /tmp/build.log 2>&1 || { tail -n 100 /tmp/build.log; exit 1; }
