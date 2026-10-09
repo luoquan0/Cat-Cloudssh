@@ -36,7 +36,10 @@ def exchange(payload, marker, timeout=12):
             output.extend(chunk)
             if len(output) > 4 * 1024 * 1024:
                 raise RuntimeError('regression fixture exceeded output bound')
-        if marker in output and b'CLOUDSSH_TEST_READY> ' in output.split(marker, 1)[1]:
+        if not marker:
+            if b'CLOUDSSH_TEST_READY> ' in output:
+                return bytes(output)
+        elif marker in output and b'CLOUDSSH_TEST_READY> ' in output.split(marker, 1)[1]:
             return bytes(output)
     raise RuntimeError('timed out waiting for command frame and parent prompt')
 
@@ -48,7 +51,6 @@ try:
         marker = ('\x1b]777;cloudssh-agent-end=' + case['token'] + ';status=').encode()
         output = exchange(case['wrapper'].encode(), marker)
         status = int(output.split(marker, 1)[1].split(b'\x07', 1)[0])
-        # The colon/value is not present in the echoed printf command.
         probe = exchange(b"printf 'PARENT_OK:%s\\n' \"$CLOUDSSH_PARENT_TEST\"\r", b'PARENT_OK:kept')
         if b'PARENT_OK:kept' not in probe:
             raise RuntimeError('parent environment changed')
