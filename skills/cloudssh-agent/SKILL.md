@@ -42,6 +42,10 @@ description: 通过自带的零 npm 依赖脚本和已审批的 Ed25519 设备�
    主机和快速连接还需要网页为设备分别授予“创建主机”和“快速连接”权限；只读
    设备不能借助 Skill 绕过这些权限。
 
+   如果需要在同一台电脑访问多个**不同的 CloudSSH 平台实例**，不要直接在当前
+   配置目录再次运行 `auth login --url <其他地址>`。请先按下面的“多平台切换”
+   规则选定该平台独立的配置目录，再检查已有登录；避免覆盖原平台的设备身份。
+
 3. 先运行 `servers list`；结果包含项目名、完整服务器名、跨项目稳定的 `hostId`
    和项目入口 `serverId`，以及已授权范围内的 `address`、`port`、`folder`、
    `tags`。这些是连接定位和资产标记信息，不包含用户名、密码、私钥或其他认证
@@ -79,6 +83,89 @@ description: 通过自带的零 npm 依赖脚本和已审批的 Ed25519 设备�
 HTTP opt-in 只改变传输层准入，不改变 Ed25519 设备签名、nonce 防重放、scope、
 项目隔离、凭据隔离、幂等键或审计。不要通过伪造 `X-Forwarded-Proto:https`
 或 SSH 隧道绕过传输策略。
+
+## 多个 CloudSSH 平台登录与切换（保留各自审批）
+
+这里的“平台”指不同的 CloudSSH 网页/API 地址，**不是**同一平台下的多台 SSH
+主机。同一平台内已经授权的多台 SSH 主机用 `servers list` 和 `serverId` 选择，
+不要为了切换主机而重新登录。不同 CloudSSH 平台的设备审批彼此独立。
+
+- 默认配置目录只保存一套 `profile.json`。当再次在**相同目录**执行
+  `auth login --url <另一平台>` 时，旧配置会被替换；这不叫切换。
+- 首次接入另一个平台时，先指定专属的 `CLOUDSSH_CONFIG_DIR`，运行
+  `auth status`。仅当该目录尚未授权时才运行 `auth login` 并完成网页审批。
+- 日后访问哪个平台，就让**该次及后续相关命令**使用那个平台固定的配置目录；
+  先用 `auth status` 核对 `baseUrl`，再运行 `servers list`、`jobs`、
+  `sessions` 或 `files`。如果 `baseUrl` 与目标地址不一致，先停止并选择
+  正确目录，不要在错误目录里重登录。
+- 切换时**不要**运行 `auth logout`、重建 `profile.json`、删除配置目录或
+  重置系统钥匙串。每个平台的设备私钥槽由独立 ID 区分；Windows 的加密凭据
+  也存放在对应配置目录。保持目录和安全存储不变即可复用已批准的设备身份。
+- 每次访问必须明确目标平台，不能只凭 SSH 主机名猜平台。跨平台的
+  `serverId`、会话 ID 和设备 ID 不可混用。除非设备被撤销、到期或私钥
+  丢失，才需要重新发起该平台的设备审批。
+
+Windows PowerShell 示例：假设 `192.168.50.241:2244` 使用**已有默认配置**，
+`192.168.222.150:2244` 使用
+`$env:LOCALAPPDATA\CloudSSH-222150`。以下命令会先检查 222.150 的独立登录，
+已有授权则复用；仅当配置目录完全为空时才启动首次审批。最后会还原环境变量，
+**不能把登录命令拿到 `finally` 之后单独执行，否则会写错目录**：
+
+```powershell
+$script = "$env:USERPROFILE\.agents\skills\cloudssh-agent\scripts\cloudssh.mjs"
+$previous = $env:CLOUDSSH_CONFIG_DIR
+try {
+    $env:CLOUDSSH_CONFIG_DIR = "$env:LOCALAPPDATA\CloudSSH-222150"
+    $status = node $script auth status | ConvertFrom-Json
+    if ($status.configured -and
+        $status.baseUrl -ne "http://192.168.222.150:2244/agent/v1") {
+        throw "配置目录指向另一个 CloudSSH 平台；停止操作，避免覆盖登录"
+    }
+    if ($status.authenticated) {
+        node $script servers list
+    } elseif ($status.configured) {
+        throw "已有 222.150 配置但设备私钥不可用；先排查密钥，不要贸然覆盖"
+    } else {
+        # 仅首次需要网页审批设备
+        node $script auth login --url http://192.168.222.150:2244 --allow-http
+        node $script servers list
+    }
+}
+finally {
+    if ($null -eq $previous) {
+        Remove-Item Env:\CLOUDSSH_CONFIG_DIR -ErrorAction SilentlyContinue
+    } else {
+        $env:CLOUDSSH_CONFIG_DIR = $previous
+    }
+}
+```
+
+回到原来的 50.241 时，临时移除 `CLOUDSSH_CONFIG_DIR` 使用默认目录，
+同样先核对 `baseUrl`，不要再次登录：
+
+```powershell
+$previous = $env:CLOUDSSH_CONFIG_DIR
+try {
+    Remove-Item Env:\CLOUDSSH_CONFIG_DIR -ErrorAction SilentlyContinue
+    $status = node $script auth status | ConvertFrom-Json
+    if ($status.baseUrl -notmatch '^https?://192\.168\.50\.241:2244/agent/v1$' -or
+        -not $status.authenticated) {
+        throw "默认配置不是已登录的 50.241，停止操作并检查配置"
+    }
+    node $script servers list
+}
+finally {
+    if ($null -eq $previous) {
+        Remove-Item Env:\CLOUDSSH_CONFIG_DIR -ErrorAction SilentlyContinue
+    } else {
+        $env:CLOUDSSH_CONFIG_DIR = $previous
+    }
+}
+```
+
+在 macOS/Linux 的 shell 中也可针对单个命令指定目录，例如：
+`CLOUDSSH_CONFIG_DIR="$HOME/.config/cloudssh-222150" node <脚本> auth status`。
+同一平台的全部操作始终复用相同目录；不要在不同平台之间共享该目录。
 
 ## 项目、分类与主机
 
